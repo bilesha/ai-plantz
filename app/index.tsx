@@ -1,24 +1,30 @@
 import { useState } from "react";
-import { ActivityIndicator, Button, ScrollView, Text, TextInput, View } from "react-native";
-import { styles } from "../styles/index.styles"; //
+import { Button, ScrollView, Text, TextInput, View } from "react-native";
+import { fetchPlantCareTips } from "../api/geminiai";
+import PlantCareTips from "../components/PlantCareTips";
 import { RANDOM_PLANTS } from "../constants/plants";
-import {fetchPlantCareTips} from "../api/geminiai"
+import { styles } from "../styles/index.styles";
+import { useRouter } from "expo-router";
 
-console.log("✅ App loaded!");
 
 export default function Index() {
   const [plant, setPlant] = useState("");
-  const [tips, setTips] = useState("");
+  const [summary, setSummary] = useState("");
+  const [details, setDetails] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const router = useRouter();
 
   const handleGetTips = async () => {
     setLoading(true);
     setError(null);
-    setTips("");
+    setSummary("");
+    setDetails("");
     try {
-      const careTips = await fetchPlantCareTips(plant);
-      setTips(careTips);
+      const tips = await fetchPlantCareTips(plant); // returns { summary, details }
+      setSummary(tips.summary);
+      setDetails(tips.details);
     } catch (err: any) {
       setError(err.message || "Unknown error");
     } finally {
@@ -26,47 +32,54 @@ export default function Index() {
     }
   };
 
+  const handleShowMore = () => {
+    try {
+      router.push({
+        pathname: "/screens/PlantDetailsAiGenerated",
+        params: {
+          plantName: plant,
+          details: encodeURIComponent(details),
+        },
+      });
+    } catch (error) {
+      console.error("Navigation error:", error);
+    }
+  };
+  
   const handleRandomPlant = () => {
-    const randomIndex = Math.floor(Math.random() * RANDOM_PLANTS.length);
-    const randomPlant = RANDOM_PLANTS[randomIndex];
+    const randomPlant = RANDOM_PLANTS[Math.floor(Math.random() * RANDOM_PLANTS.length)];
     setPlant(randomPlant);
-    setTips("");
+    setError(null);
+    setSummary("");
+    setDetails("");
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>🌿 AI Plant Assistant</Text>
+
       <TextInput
         placeholder="Enter plant name (e.g., Monstera)"
         style={styles.input}
         value={plant}
         onChangeText={setPlant}
       />
-      <View style ={styles.buttonSpacing}>
-        <Button title="Get Care Tips" onPress={handleGetTips} disabled={!plant} />
-      </View>
-      
-      <View style ={styles.buttonSpacing}>
-        <Button title="Random Plant" onPress={handleRandomPlant}/>
+
+      <View style={styles.buttonSpacing}>
+        <Button title="Get Care Tips" onPress={handleGetTips} disabled={!plant || loading} />
       </View>
 
-      {/* Loading spinner */}
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
+      <View style={styles.buttonSpacing}>
+        <Button title="Random Plant" onPress={handleRandomPlant} disabled={loading} />
+      </View>
+
+      <PlantCareTips tips={summary} loading={loading} error={error} />
+
+      {summary && (
+        <View style={styles.buttonSpacing}>
+          <Button title="Show More" onPress={handleShowMore} />
         </View>
       )}
-
-      {/* Error message */}
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      {/* Tips text */}
-      {tips ? <Text style={styles.tips}>{tips}</Text> : null}
     </ScrollView>
   );
 }
-

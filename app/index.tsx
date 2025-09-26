@@ -6,11 +6,15 @@ import {
   TextInput,
   View,
   TouchableOpacity,
+  FlatList,
 } from "react-native";
 // Let's use the robust utility function we created
 import { getPlantTips } from "./utilities/fetchPlantTips";
 import PlantCareTips from "../components/PlantCareTips";
 import { RANDOM_PLANTS } from "../constants/plants";
+
+const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
 
 export default function Index() {
   const router = useRouter();
@@ -28,6 +32,13 @@ export default function Index() {
       // The API call returns { summary, details }, but we only need the summary here.
       const tips = await getPlantTips(plant);
       setSummary(tips.summary);
+
+      // ✅ Add plant to recent searches
+      setRecentSearches((prev) => {
+        const newList = [plant, ...prev.filter((p) => p !== plant)].slice(0, 5); // Keep only latest 5 unique searches
+        return newList;
+      });
+
     } catch (err: any) {
       setError(err.message || "Failed to fetch tips");
     } finally {
@@ -92,6 +103,29 @@ export default function Index() {
           </Text>
         </TouchableOpacity>
       </View>
+      
+      /* Recent searches */
+
+      {recentSearches.length > 0 && (
+        <FlatList
+          data={recentSearches}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item: string, index: number) => `${item}-${index}`}
+          className="mb-4"
+          renderItem={({ item }: { item: string }) => (
+            <TouchableOpacity
+              onPress={() => {
+                setPlant(item); // fill input with tapped plant
+                handleGetTips();  // fetch summary for this plant
+              }}
+              className="bg-green-100 px-3 py-1 rounded-full mr-2"
+            >
+              <Text className="text-green-800">{item}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
 
       {/* The PlantCareTips component now handles showing the summary, loading, or error */}
       <PlantCareTips summary={summary} loading={loading} error={error} />

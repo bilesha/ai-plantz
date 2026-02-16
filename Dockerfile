@@ -1,20 +1,23 @@
-FROM node:22
+# Use Node image
+FROM node:20-alpine
 
+# Install expo-cli globally
+RUN npm install -g expo-cli
+
+# Set working directory
 WORKDIR /app
 
-#Copy package.json and package-lock.json
+# Copy package.json first for caching
 COPY package*.json ./
 
-#install app dependencies
+# Install dependencies
 RUN npm install
 
-#Copy the rest of our app into the container
+# Copy the rest of the code
 COPY . .
 
-# Set port environment variables
-ENV PORT=9000
-# Expose the port so our computer can access it
-EXPOSE 9000
+# Expose Expo ports
+EXPOSE 19000 19001 19002
 
-# Run the app
-CMD ["npm", "start"]
+# Start Expo in development mode
+CMD ["npx", "expo", "start", "--tunnel"]

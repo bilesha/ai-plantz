@@ -1,4 +1,4 @@
 node_modules
-
-browsing_history
-.emv
+.expo
+dist
+npm-debug.log

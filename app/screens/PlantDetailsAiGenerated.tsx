@@ -1,77 +1,69 @@
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, ScrollView } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { getPlantTips } from "../utilities/fetchPlantTips";
-
-type PlantDetails = string | Record<string, string>;
+import {
+  ActivityIndicator, ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { getPlantTips } from "../../utilities/fetchPlantTips";
 
 export default function PlantDetailsAiGenerated() {
   const { plantName } = useLocalSearchParams();
-  const [details, setDetails] = useState<PlantDetails>("");
+  const router = useRouter();
+  const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchDetails = async () => {
-      if (!plantName) return;
-      setLoading(true);
-      setError(null);
+    (async () => {
       try {
         const data = await getPlantTips(plantName as string);
         setDetails(data.details);
-      } catch (err: any) {
-        setError(err.message || "Failed to load plant details.");
       } finally {
         setLoading(false);
       }
-    };
-    fetchDetails();
+    })();
   }, [plantName]);
 
   return (
-    <ScrollView
-      className="flex-1 bg-green-50 p-6"
-      contentContainerStyle={{ flexGrow: 1 }}
-    >
-      <Text className="text-3xl font-bold text-green-800 mb-4">
-        {plantName}
-      </Text>
+    <ScrollView style={d.container} contentContainerStyle={d.content}>
+      <TouchableOpacity onPress={() => router.back()} style={d.backBtn}>
+        <Text style={d.backText}>← Back to Search</Text>
+      </TouchableOpacity>
 
-      {loading && (
-        <View className="my-4 items-center">
-          <ActivityIndicator size="large" color="#16a34a" />
-          <Text className="text-green-800 mt-2 font-medium">
-            Loading plant details...
-          </Text>
+      <Text style={d.headerTitle}>{plantName}</Text>
+      <View style={d.divider} />
+
+      {loading ? (
+        <View style={d.loaderContainer}>
+          <ActivityIndicator size="large" color="#059669" />
+          <Text style={d.loaderText}>Asking Gemini for botanical expertise...</Text>
         </View>
-      )}
-
-      {error && (
-        <View className="my-4 p-3 bg-red-100 rounded">
-          <Text className="text-red-600 font-medium">{error}</Text>
-        </View>
-      )}
-
-      {!loading && !error && details && (
-        <View className="my-4 p-4 bg-white rounded-lg shadow">
-          {typeof details === "string" ? (
-            <Text className="text-gray-800 text-base leading-relaxed">
-              {details}
-            </Text>
-          ) : (
-            Object.entries(details).map(([key, value]) => (
-              <View key={key} className="mb-3">
-                <Text className="text-lg font-semibold capitalize text-green-700">
-                  {key}
-                </Text>
-                <Text className="text-gray-800 text-base leading-relaxed">
-                  {value}
-                </Text>
-              </View>
-            ))
-          )}
+      ) : (
+        <View>
+          {details && Object.entries(details).map(([key, value]) => (
+            <View key={key} style={d.card}>
+              <Text style={d.cardLabel}>{key}</Text>
+              <Text style={d.cardValue}>{value as string}</Text>
+            </View>
+          ))}
         </View>
       )}
     </ScrollView>
   );
 }
+
+const d = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  content: { padding: 24, paddingTop: 60 },
+  backBtn: { marginBottom: 24 },
+  backText: { color: '#059669', fontWeight: '700', fontSize: 16 },
+  headerTitle: { fontSize: 40, fontWeight: '900', color: '#0f172a' },
+  divider: { height: 6, width: 60, backgroundColor: '#10b981', borderRadius: 3, marginVertical: 16 },
+  loaderContainer: { marginTop: 100, alignItems: 'center' },
+  loaderText: { marginTop: 16, color: '#94a3b8', fontWeight: '500' },
+  card: { backgroundColor: '#f8fafc', padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: '#10b981' },
+  cardLabel: { fontSize: 12, fontWeight: '900', color: '#059669', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
+  cardValue: { fontSize: 17, color: '#334155', lineHeight: 26 },
+});

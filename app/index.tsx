@@ -1,13 +1,16 @@
-import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
-import { 
-  ScrollView, Text, TextInput, TouchableOpacity, View, 
-  ActivityIndicator, StyleSheet 
-} from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity, View
+} from "react-native";
 import PlantCareTips from "../components/PlantCareTips";
 import { RANDOM_PLANTS } from "../constants/plants";
 import { getPlantTips } from "../utilities/fetchPlantTips";
+import { PlantEntry } from "./types";
 
 export default function Index() {
   const router = useRouter();
@@ -15,13 +18,15 @@ export default function Index() {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  
+  // Changed from string[] to PlantEntry[]
+  const [history, setHistory] = useState<PlantEntry[]>([]);
 
-  // Load History
+  // Load Full History
   useEffect(() => {
     (async () => {
-      const saved = await AsyncStorage.getItem("recentSearches");
-      if (saved) setRecentSearches(JSON.parse(saved));
+      const saved = await AsyncStorage.getItem("plantHistory");
+      if (saved) setHistory(JSON.parse(saved));
     })();
   }, []);
 
@@ -34,13 +39,36 @@ export default function Index() {
     setSummary("");
 
     try {
+      // 🚀 Step 3: Use Cached Data Before Fetching
+      const cached = history.find(p => p.name.toLowerCase() === target.toLowerCase());
+      if (cached) {
+        setSummary(cached.summary);
+        setLoading(false);
+        return; // Exit early! 🔥
+      }
+
+      // If not in cache, fetch from API
       const tips = await getPlantTips(target);
       setSummary(tips.summary);
       
-      // Update history
-      const newList = [target, ...recentSearches.filter(p => p !== target)].slice(0, 5);
-      setRecentSearches(newList);
-      await AsyncStorage.setItem("recentSearches", JSON.stringify(newList));
+      // 🚀 Step 2: Create full plant object
+      const newEntry: PlantEntry = {
+        name: target,
+        summary: tips.summary,
+        details: tips.details,
+        isFavorite: false,
+        lastViewed: Date.now(),
+      };
+
+      // Update history state and AsyncStorage
+      const updatedHistory = [
+        newEntry, 
+        ...history.filter(p => p.name.toLowerCase() !== target.toLowerCase())
+      ].slice(0, 10); // Keep last 10 full objects
+      
+      setHistory(updatedHistory);
+      await AsyncStorage.setItem("plantHistory", JSON.stringify(updatedHistory));
+
     } catch (err) {
       setError("Server connection failed");
     } finally {
@@ -51,10 +79,31 @@ export default function Index() {
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.header}>
-        <Text style={s.title}>🌿 LeafyAI</Text>
-        <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
+        {/* This View is the "container" that forces items to be side-by-side */}
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+
+          {/* 1. Left Side: Titles */}
+          <View>
+            <Text style={s.title}>🌿 LeafyAI</Text>
+            <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
+          </View>
+
+          {/* 2. Right Side: The Button */}
+          <TouchableOpacity
+            style={s.btnHistoryIcon}
+            onPress={() => router.push("/history")}
+          >
+            <Text style={{ fontSize: 24 }}>📜</Text>
+          </TouchableOpacity>
+
+        </View>
       </View>
 
+      
       <View style={s.inputCard}>
         <TextInput
           placeholder="Search a plant..."
@@ -83,19 +132,26 @@ export default function Index() {
         </TouchableOpacity>
       </View>
 
-      {/* Recent Searches Section */}
-      {recentSearches.length > 0 && (
+      {/* 🚀 Updated Recent Searches (now pulls from full history) */}
+      {history.length > 0 && (
         <View style={s.recentSection}>
           <View style={s.recentHeader}>
             <Text style={s.recentTitle}>RECENT SEARCHES</Text>
-            <TouchableOpacity onPress={async () => { setRecentSearches([]); await AsyncStorage.removeItem("recentSearches"); }}>
+            <TouchableOpacity onPress={async () => { setHistory([]); await AsyncStorage.removeItem("plantHistory"); }}>
               <Text style={s.clearText}>Clear</Text>
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {recentSearches.map((item, i) => (
-              <TouchableOpacity key={i} style={s.pill} onPress={() => { setPlant(item); handleGetTips(item); }}>
-                <Text style={s.pillText}>{item}</Text>
+            {history.map((item, i) => (
+              <TouchableOpacity 
+                key={i} 
+                style={s.pill} 
+                onPress={() => { 
+                  setPlant(item.name); 
+                  setSummary(item.summary); // Instant load!
+                }}
+              >
+                <Text style={s.pillText}>{item.name}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -138,4 +194,14 @@ const s = StyleSheet.create({
   pillText: { color: '#475569', fontWeight: '600' },
   btnOutline: { marginTop: 16, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#059669', padding: 18, borderRadius: 20, alignItems: 'center' },
   btnOutlineText: { color: '#065f46', fontWeight: '800', fontSize: 16 },
+  btnHistoryIcon: {
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 18,
+    elevation: 3, // For Android shadow
+    shadowColor: '#000', // For iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
 });

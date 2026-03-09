@@ -1,5 +1,5 @@
 // __tests__/history.test.ts
-import { sortHistoryByDate } from '../historyLogic'; // Point to the file location
+import { sortHistoryByDate } from '../app/logic/historyLogic'; // Point to the file location
 
 describe('History Sorting', () => {
   test('should sort history by lastViewed descending', () => {

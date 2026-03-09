@@ -1,5 +1,4 @@
-// app/historyLogic.ts
-import { PlantEntry } from "./app/types"; // Adjust this path if this file is in the 'app' folder
+import { PlantEntry } from "../types";
 
 export const toggleFavoriteLogic = (history: PlantEntry[], plantName: string): PlantEntry[] => {
   return history.map((item) => {
@@ -10,7 +9,6 @@ export const toggleFavoriteLogic = (history: PlantEntry[], plantName: string): P
   });
 };
 
-// Use lastViewed instead of timestamp
 export const sortHistoryByDate = (history: PlantEntry[]): PlantEntry[] => {
   return [...history].sort((a, b) => b.lastViewed - a.lastViewed);
 };

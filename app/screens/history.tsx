@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { PlantEntry } from "../types";
+import { toggleFavoriteLogic, sortHistoryByDate } from "../logic/historyLogic"; // Import logic
+import { useMemo } from 'react';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -18,19 +20,19 @@ export default function HistoryScreen() {
   }, []);
 
   const toggleFavorite = async (plantName: string) => {
-    const updatedHistory = history.map((item) => {
-      if (item.name === plantName) {
-        return { ...item, isFavorite: !item.isFavorite };
-      }
-      return item;
-    });
+    const updatedHistory = toggleFavoriteLogic(history, plantName);
     setHistory(updatedHistory);
     await AsyncStorage.setItem("plantHistory", JSON.stringify(updatedHistory));
   };
 
-  const displayedHistory = showFavoritesOnly
-    ? history.filter(item => item.isFavorite)
+  // Use the sorted data for the list
+  const displayedHistory = useMemo(() => {
+  const filtered = showFavoritesOnly 
+    ? history.filter(item => item.isFavorite) 
     : history;
+    
+  return sortHistoryByDate(filtered);
+}, [history, showFavoritesOnly]); // 2. Dependencies
 
   const renderItem = ({ item }: { item: PlantEntry }) => (
     <View style={s.card}>

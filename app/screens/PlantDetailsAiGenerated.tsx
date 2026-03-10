@@ -8,9 +8,12 @@ import {
   View
 } from "react-native";
 import { getPlantTips } from "../../utilities/fetchPlantTips";
+import { getPlantDetailsFromCache, savePlantDetailsToCache } from "../logic/cacheLogic";
+import { fetchPlantCareTips } from "../../api/geminiai"; //
 
 export default function PlantDetailsAiGenerated() {
   const { plantName } = useLocalSearchParams();
+  const safePlantName = Array.isArray(plantName) ? plantName[0] : plantName;
   const router = useRouter();
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +28,36 @@ export default function PlantDetailsAiGenerated() {
       }
     })();
   }, [plantName]);
+
+  // 1. Updated useEffect to use the safe string
+  useEffect(() => {
+    if (!safePlantName) return;
+
+    const loadDetails = async () => {
+      setLoading(true);
+      // You can either call your fetchDetails helper here or keep your getPlantTips
+      await fetchDetails(safePlantName);
+      setLoading(false);
+    };
+    loadDetails();
+  }, [safePlantName]);
+
+  // 2. Updated fetchDetails to use the safe string
+  const fetchDetails = async (name: string) => {
+    // Check cache first
+    const cachedData = await getPlantDetailsFromCache(name);
+    if (cachedData) {
+      setDetails(cachedData);
+      return;
+    }
+
+    // Fetch from API if cache miss
+    const apiData = await fetchPlantCareTips(name);
+
+    // Save to cache
+    await savePlantDetailsToCache(name, apiData);
+    setDetails(apiData);
+  };
 
   return (
     <ScrollView style={d.container} contentContainerStyle={d.content}>

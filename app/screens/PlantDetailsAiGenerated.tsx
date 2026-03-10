@@ -1,63 +1,52 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator, ScrollView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from "react-native";
-import { getPlantTips } from "../../utilities/fetchPlantTips";
-import { getPlantDetailsFromCache, savePlantDetailsToCache } from "../logic/cacheLogic";
 import { fetchPlantCareTips } from "../../api/geminiai"; //
+import { CardSkeleton } from "../../components/SkeletonLoader"; // Import the skeleton loader
+import { getPlantDetailsFromCache, savePlantDetailsToCache } from "../logic/cacheLogic";
 
 export default function PlantDetailsAiGenerated() {
   const { plantName } = useLocalSearchParams();
   const safePlantName = Array.isArray(plantName) ? plantName[0] : plantName;
   const router = useRouter();
+  
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await getPlantTips(plantName as string);
-        setDetails(data.details);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [plantName]);
-
-  // 1. Updated useEffect to use the safe string
-  useEffect(() => {
-    if (!safePlantName) return;
-
-    const loadDetails = async () => {
-      setLoading(true);
-      // You can either call your fetchDetails helper here or keep your getPlantTips
-      await fetchDetails(safePlantName);
-      setLoading(false);
-    };
-    loadDetails();
-  }, [safePlantName]);
-
-  // 2. Updated fetchDetails to use the safe string
+  // 1. One clean source of truth for fetching
   const fetchDetails = async (name: string) => {
-    // Check cache first
-    const cachedData = await getPlantDetailsFromCache(name);
-    if (cachedData) {
-      setDetails(cachedData);
-      return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const cachedData = await getPlantDetailsFromCache(name);
+      if (cachedData) {
+        setDetails(cachedData);
+        return; // Exit early if cache hit
+      }
+
+      const apiData = await fetchPlantCareTips(name);
+      await savePlantDetailsToCache(name, apiData);
+      setDetails(apiData);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError("Could not load plant details. Please check your internet connection.");
+    } finally {
+      setLoading(false);
     }
-
-    // Fetch from API if cache miss
-    const apiData = await fetchPlantCareTips(name);
-
-    // Save to cache
-    await savePlantDetailsToCache(name, apiData);
-    setDetails(apiData);
   };
+
+  // 2. Single effect to trigger on load
+  useEffect(() => {
+    if (safePlantName) fetchDetails(safePlantName);
+  }, [safePlantName]);
 
   return (
     <ScrollView style={d.container} contentContainerStyle={d.content}>
@@ -65,14 +54,20 @@ export default function PlantDetailsAiGenerated() {
         <Text style={d.backText}>← Back to Search</Text>
       </TouchableOpacity>
 
-      <Text style={d.headerTitle}>{plantName}</Text>
+      <Text style={d.headerTitle}>{safePlantName}</Text>
       <View style={d.divider} />
 
-      {loading ? (
-        <View style={d.loaderContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-          <Text style={d.loaderText}>Asking Gemini for botanical expertise...</Text>
+      {/* 3. Logic to show Error, Loading, or Content */}
+      {error ? (
+        <View style={d.errorContainer}>
+          <Text style={d.errorIcon}>⚠️</Text>
+          <Text style={d.errorText}>{error}</Text>
+          <TouchableOpacity style={d.retryButton} onPress={() => fetchDetails(safePlantName as string)}>
+            <Text style={d.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
         </View>
+      ) : loading ? (
+        <CardSkeleton /> 
       ) : (
         <View>
           {details && Object.entries(details).map(([key, value]) => (
@@ -99,4 +94,37 @@ const d = StyleSheet.create({
   card: { backgroundColor: '#f8fafc', padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: '#10b981' },
   cardLabel: { fontSize: 12, fontWeight: '900', color: '#059669', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   cardValue: { fontSize: 17, color: '#334155', lineHeight: 26 },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 50,
+    marginBottom: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#64748b', // slate-500
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#059669', // your emerald-600 green
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 16,
+  },
 });

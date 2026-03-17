@@ -1,14 +1,12 @@
 import express from "express";
+import cors from "cors";
 import dotenv from "dotenv";
-import {
-  GoogleGenerativeAI,
-  HarmCategory,
-  HarmBlockThreshold,
-} from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
@@ -45,9 +43,11 @@ app.post("/api/plant-tips", async (req, res) => {
     `;
 
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    let responseText = result.response.text();
 
-    // The AI response should be a clean JSON string, so we can parse it directly.
+    // The AI response should be a clean JSON string, but sometimes includes markdown code blocks
+    responseText = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
     const parsedResponse = JSON.parse(responseText);
 
     res.json(parsedResponse);

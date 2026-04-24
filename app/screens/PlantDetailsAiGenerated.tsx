@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { fetchPlantCareTips } from "../../api/geminiai"; //
+import { getPlantTips } from "../../utilities/fetchPlantTips";
 import { CardSkeleton } from "../../components/SkeletonLoader"; // Import the skeleton loader
 import { getPlantDetailsFromCache, savePlantDetailsToCache } from "../logic/cacheLogic";
 
@@ -32,9 +32,9 @@ export default function PlantDetailsAiGenerated() {
         return; // Exit early if cache hit
       }
 
-      const apiData = await fetchPlantCareTips(name);
-      await savePlantDetailsToCache(name, apiData);
-      setDetails(apiData);
+      const apiData = await getPlantTips(name);
+      await savePlantDetailsToCache(name, apiData.details);
+      setDetails(apiData.details);
     } catch (err) {
       console.error("Fetch error:", err);
       setError("Could not load plant details. Please check your internet connection.");

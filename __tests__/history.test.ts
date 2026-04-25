@@ -9,7 +9,7 @@ describe('Toggle Favourite', () => {
 
   test('flips isFavorite from false to true for the named plant', () => {
     const result = toggleFavoriteLogic(baseHistory, 'Monstera');
-    expect(result.find((p: any) => p.name === 'Monstera').isFavorite).toBe(true);
+    expect(result.find((p: any) => p.name === 'Monstera')!.isFavorite).toBe(true);
   });
 
   test('flips isFavorite from true back to false (toggle, not set)', () => {
@@ -22,7 +22,7 @@ describe('Toggle Favourite', () => {
 
   test('leaves all other entries unchanged', () => {
     const result = toggleFavoriteLogic(baseHistory, 'Monstera');
-    expect(result.find((p: any) => p.name === 'Cactus').isFavorite).toBe(false);
+    expect(result.find((p: any) => p.name === 'Cactus')!.isFavorite).toBe(false);
   });
 
   test('returns the array unchanged when the plant name is not found', () => {

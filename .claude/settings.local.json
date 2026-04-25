@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(winget upgrade:*)",
+      "Bash(git -C /f/Code/React/ai-plantz log --oneline)",
+      "Bash(npm test *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(node -e \"const pkg = require\\('./node_modules/jest-expo/jest-preset.js'\\); console.log\\(JSON.stringify\\(pkg, null, 2\\)\\)\")",
+      "Bash(cat babel.config.js)",
+      "Bash(cat babel.config.json)"
+    ]
+  }
+}

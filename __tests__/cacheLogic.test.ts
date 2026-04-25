@@ -1,6 +1,7 @@
 // __tests__/cacheLogic.test.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPlantDetailsFromCache, savePlantDetailsToCache } from '../app/logic/cacheLogic';
+import { PlantDetails } from '../app/types';
 
 // Jest replaces the real AsyncStorage module with this official in-memory mock
 // from the package itself. It behaves exactly like AsyncStorage but stores
@@ -16,6 +17,9 @@ beforeEach(async () => {
   await AsyncStorage.clear();
 });
 
+// Reusable fixture — matches the PlantDetails type exactly.
+const MONSTERA: PlantDetails = { watering: 'Weekly', light: 'Bright indirect', fertilizer: 'Spring only' };
+
 describe('getPlantDetailsFromCache', () => {
   test('returns null when nothing has been cached for that plant', async () => {
     // The storage is empty (cleared above). getItem returns null for a missing
@@ -29,21 +33,20 @@ describe('getPlantDetailsFromCache', () => {
     // First seed the cache manually via AsyncStorage so this test is isolated
     // from savePlantDetailsToCache (we are testing the reader, not the writer).
     // JSON.stringify mirrors what the real code stores.
-    const data = { watering: 'Weekly', light: 'Bright indirect' };
-    await AsyncStorage.setItem('cache_Monstera', JSON.stringify(data));
+    await AsyncStorage.setItem('cache_Monstera', JSON.stringify(MONSTERA));
 
     const result = await getPlantDetailsFromCache('Monstera');
 
     // The function must deserialise the stored string back into an object.
-    // toEqual does a deep value comparison, so {watering:'Weekly'} === {watering:'Weekly'}.
-    expect(result).toEqual(data);
+    // toEqual does a deep value comparison.
+    expect(result).toEqual(MONSTERA);
   });
 
   test('uses the key cache_<plantName> — not just the plant name', async () => {
     // This guards against a regression where the prefix is dropped.
     // We write to the bare key 'Monstera' and confirm the function does NOT
     // return it — because it should be looking for 'cache_Monstera'.
-    await AsyncStorage.setItem('Monstera', JSON.stringify({ watering: 'Never' }));
+    await AsyncStorage.setItem('Monstera', JSON.stringify(MONSTERA));
 
     const result = await getPlantDetailsFromCache('Monstera');
 
@@ -53,7 +56,7 @@ describe('getPlantDetailsFromCache', () => {
   test('handles a plant name with spaces correctly', async () => {
     // Plant names from the UI can contain spaces ("Snake Plant").
     // The key becomes 'cache_Snake Plant' — confirm the round-trip works.
-    const data = { watering: 'Monthly' };
+    const data: PlantDetails = { watering: 'Monthly', light: 'Low', fertilizer: 'None' };
     await AsyncStorage.setItem('cache_Snake Plant', JSON.stringify(data));
 
     const result = await getPlantDetailsFromCache('Snake Plant');
@@ -66,19 +69,17 @@ describe('savePlantDetailsToCache', () => {
   test('stores the data so a subsequent get returns it', async () => {
     // The most important integration check: save then read, confirm the data
     // survives the round-trip through JSON serialisation and deserialisation.
-    const data = { watering: 'Weekly', light: 'Low', fertilizer: 'Spring only' };
-
-    await savePlantDetailsToCache('Cactus', data);
+    await savePlantDetailsToCache('Cactus', MONSTERA);
     const result = await getPlantDetailsFromCache('Cactus');
 
-    expect(result).toEqual(data);
+    expect(result).toEqual(MONSTERA);
   });
 
   test('overwrites a previously cached value for the same plant', async () => {
     // The cache should be a simple last-write-wins store. If the AI returns
     // updated data for a plant we already cached, the new data replaces the old.
-    const original = { watering: 'Daily' };
-    const updated  = { watering: 'Weekly' };
+    const original: PlantDetails = { watering: 'Daily', light: 'Full sun', fertilizer: 'Monthly' };
+    const updated: PlantDetails  = { watering: 'Weekly', light: 'Shade', fertilizer: 'Never' };
 
     await savePlantDetailsToCache('Fern', original);
     await savePlantDetailsToCache('Fern', updated);
@@ -90,27 +91,30 @@ describe('savePlantDetailsToCache', () => {
   test('caches each plant under its own independent key', async () => {
     // Saving data for "Cactus" must not affect the cache for "Fern".
     // This would break if the key ignored the plant name (e.g. always 'cache_').
-    await savePlantDetailsToCache('Cactus', { watering: 'Monthly' });
-    await savePlantDetailsToCache('Fern',   { watering: 'Daily' });
+    const cactusData: PlantDetails = { watering: 'Monthly', light: 'Full sun', fertilizer: 'Rarely' };
+    const fernData: PlantDetails   = { watering: 'Daily',   light: 'Shade',    fertilizer: 'Monthly' };
+
+    await savePlantDetailsToCache('Cactus', cactusData);
+    await savePlantDetailsToCache('Fern', fernData);
 
     const cactusTips = await getPlantDetailsFromCache('Cactus');
     const fernTips   = await getPlantDetailsFromCache('Fern');
 
-    expect(cactusTips.watering).toBe('Monthly');
-    expect(fernTips.watering).toBe('Daily');
+    // ! asserts the result is non-null — we just saved these so we know they exist
+    expect(cactusTips!.watering).toBe('Monthly');
+    expect(fernTips!.watering).toBe('Daily');
   });
 
-  test('serialises nested objects without data loss', async () => {
-    // The real API response is a nested object with a details sub-object.
-    // Confirm that deep nesting survives JSON.stringify → JSON.parse.
-    const data = {
-      summary: 'Easy to care for',
-      details: { watering: 'Low', light: 'Any', fertilizer: 'None' },
-    };
+  test('all three fields survive the JSON round-trip intact', async () => {
+    // Confirms that every field of PlantDetails survives JSON.stringify → JSON.parse
+    // without being dropped, renamed, or coerced to a different type.
+    const data: PlantDetails = { watering: 'Low', light: 'Any', fertilizer: 'None' };
 
     await savePlantDetailsToCache('ZZ Plant', data);
     const result = await getPlantDetailsFromCache('ZZ Plant');
 
-    expect(result.details.light).toBe('Any');
+    expect(result!.watering).toBe('Low');
+    expect(result!.light).toBe('Any');
+    expect(result!.fertilizer).toBe('None');
   });
 });

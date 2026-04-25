@@ -13,13 +13,14 @@ export const CardSkeleton = () => {
     ).start();
   }, []);
 
-  // Create 4-5 skeleton cards to fill the screen
+  // 3 cards to match the 3 actual fields (watering, light, fertilizer)
   return (
     <View style={styles.container}>
-      {[1, 2, 3, 4, 5].map((i) => (
+      {[1, 2, 3].map((i) => (
         <View key={i} style={styles.card}>
           <Animated.View style={[styles.label, { opacity }]} />
-          <Animated.View style={[styles.value, { opacity }]} />
+          <Animated.View style={[styles.valueLine1, { opacity }]} />
+          <Animated.View style={[styles.valueLine2, { opacity }]} />
         </View>
       ))}
     </View>
@@ -27,25 +28,35 @@ export const CardSkeleton = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
-  card: { 
-    backgroundColor: 'white', 
-    borderRadius: 20, 
-    padding: 16, 
-    marginBottom: 12, 
-    elevation: 2 
+  container: { padding: 4 },
+  // Mirrors real card style so the skeleton→content transition has no layout shift
+  card: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    borderLeftWidth: 5,
+    borderLeftColor: '#d1fae5',
   },
-  label: { 
-    height: 14, 
-    width: '30%', 
-    backgroundColor: '#e2e8f0', 
-    borderRadius: 4, 
-    marginBottom: 8 
+  label: {
+    height: 12,
+    width: '30%',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 4,
+    marginBottom: 12,
   },
-  value: { 
-    height: 18, 
-    width: '90%', 
-    backgroundColor: '#f1f5f9', 
-    borderRadius: 4 
+  // Two lines so the skeleton fills roughly the same height as real multi-line text
+  valueLine1: {
+    height: 16,
+    width: '90%',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  valueLine2: {
+    height: 16,
+    width: '65%',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 4,
   },
 });

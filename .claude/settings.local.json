@@ -9,7 +9,10 @@
       "Bash(git push *)",
       "Bash(node -e \"const pkg = require\\('./node_modules/jest-expo/jest-preset.js'\\); console.log\\(JSON.stringify\\(pkg, null, 2\\)\\)\")",
       "Bash(cat babel.config.js)",
-      "Bash(cat babel.config.json)"
+      "Bash(cat babel.config.json)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *2)",
+      "Bash(npx tsc *)"
     ]
   }
 }

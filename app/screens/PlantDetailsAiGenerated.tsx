@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "../../constants/theme";
 import { getPlantTips } from "../../utilities/fetchPlantTips";
 import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache } from "../logic/cacheLogic";
@@ -12,6 +13,8 @@ export default function PlantDetailsAiGenerated() {
   const { plantName } = useLocalSearchParams();
   const safePlantName = Array.isArray(plantName) ? plantName[0] : plantName;
   const router = useRouter();
+  const theme = useTheme();
+  const d = useMemo(() => styles(theme), [theme]);
 
   const [details, setDetails] = useState<PlantDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,6 @@ export default function PlantDetailsAiGenerated() {
     if (safePlantName) fetchDetails(safePlantName);
   }, [safePlantName]);
 
-  // Guard against navigating directly to this screen without params
   if (!safePlantName) {
     return (
       <View style={d.container}>
@@ -103,19 +105,19 @@ export default function PlantDetailsAiGenerated() {
   );
 }
 
-const d = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  content: { padding: 24, paddingTop: 60 },
-  backBtn: { marginBottom: 24 },
-  backText: { color: '#059669', fontWeight: '700', fontSize: 16 },
-  headerTitle: { fontSize: 40, fontWeight: '900', color: '#0f172a' },
-  divider: { height: 6, width: 60, backgroundColor: '#10b981', borderRadius: 3, marginVertical: 16 },
-  card: { backgroundColor: '#f8fafc', padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: '#10b981' },
-  cardLabel: { fontSize: 12, fontWeight: '900', color: '#059669', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
-  cardValue: { fontSize: 17, color: '#334155', lineHeight: 26 },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  errorIcon: { fontSize: 50, marginBottom: 20 },
-  errorText: { fontSize: 16, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 22 },
-  retryButton: { backgroundColor: '#059669', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
+  container:       { flex: 1, backgroundColor: t.surface },
+  content:         { padding: 24, paddingTop: 60 },
+  backBtn:         { marginBottom: 24 },
+  backText:        { color: t.accent, fontWeight: '700', fontSize: 16 },
+  headerTitle:     { fontSize: 40, fontWeight: '900', color: t.textHeading },
+  divider:         { height: 6, width: 60, backgroundColor: t.accentMid, borderRadius: 3, marginVertical: 16 },
+  card:            { backgroundColor: t.background, padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: t.accentMid },
+  cardLabel:       { fontSize: 12, fontWeight: '900', color: t.accent, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
+  cardValue:       { fontSize: 17, color: t.textBody, lineHeight: 26 },
+  errorContainer:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  errorIcon:       { fontSize: 50, marginBottom: 20 },
+  errorText:       { fontSize: 16, color: t.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  retryButton:     { backgroundColor: t.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   retryButtonText: { color: 'white', fontWeight: '700', fontSize: 16 },
 });

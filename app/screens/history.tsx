@@ -2,11 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "../../constants/theme";
 import type { PlantEntry } from "../types";
 import { toggleFavoriteLogic, sortHistoryByDate } from "../logic/historyLogic";
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const theme = useTheme();
+  const s = useMemo(() => styles(theme), [theme]);
+
   const [history, setHistory] = useState<PlantEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -22,7 +26,6 @@ export default function HistoryScreen() {
     }
   };
 
-  // Reload every time the screen comes into focus so new searches appear immediately
   useFocusEffect(useCallback(() => { loadHistory(); }, []));
 
   const toggleFavorite = async (plantName: string) => {
@@ -31,7 +34,7 @@ export default function HistoryScreen() {
     try {
       await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
     } catch {
-      setHistory(history); // revert on write failure
+      setHistory(history);
     }
   };
 
@@ -41,7 +44,7 @@ export default function HistoryScreen() {
     try {
       await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
     } catch {
-      setHistory(history); // revert on write failure
+      setHistory(history);
     }
   };
 
@@ -80,7 +83,7 @@ export default function HistoryScreen() {
   if (isLoading) {
     return (
       <View style={[s.container, s.centered]}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -126,24 +129,24 @@ export default function HistoryScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc", paddingHorizontal: 20, paddingTop: 60 },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 28, fontWeight: "900", color: "#064e3b", marginBottom: 20 },
-  listPadding: { paddingBottom: 40 },
-  card: { backgroundColor: "white", borderRadius: 20, marginBottom: 12, flexDirection: "row", alignItems: "center", elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
+  container:        { flex: 1, backgroundColor: t.background, paddingHorizontal: 20, paddingTop: 60 },
+  centered:         { justifyContent: 'center', alignItems: 'center' },
+  title:            { fontSize: 28, fontWeight: "900", color: t.textTitle, marginBottom: 20 },
+  listPadding:      { paddingBottom: 40 },
+  card:             { backgroundColor: t.surface, borderRadius: 20, marginBottom: 12, flexDirection: "row", alignItems: "center", elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   cardContentWrapper: { flex: 1, padding: 16 },
-  iconButton: { padding: 14, justifyContent: 'center', alignItems: 'center' },
-  textContainer: { flex: 1 },
-  plantName: { fontSize: 18, fontWeight: "700", color: "#1e293b", marginBottom: 4 },
-  summaryText: { fontSize: 14, color: "#64748b", lineHeight: 20 },
-  favIcon: { fontSize: 22 },
-  deleteIcon: { fontSize: 14, color: '#94a3b8' },
-  emptyState: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: { color: "#94a3b8", fontSize: 16, textAlign: 'center' },
-  filterContainer: { flexDirection: 'row', marginBottom: 20, gap: 10 },
-  filterBtn: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#e2e8f0' },
-  filterBtnActive: { backgroundColor: '#059669' },
-  filterText: { fontWeight: '700', color: '#475569' },
+  iconButton:       { padding: 14, justifyContent: 'center', alignItems: 'center' },
+  textContainer:    { flex: 1 },
+  plantName:        { fontSize: 18, fontWeight: "700", color: t.textPrimary, marginBottom: 4 },
+  summaryText:      { fontSize: 14, color: t.textSecondary, lineHeight: 20 },
+  favIcon:          { fontSize: 22 },
+  deleteIcon:       { fontSize: 14, color: t.textMuted },
+  emptyState:       { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText:        { color: t.textMuted, fontSize: 16, textAlign: 'center' },
+  filterContainer:  { flexDirection: 'row', marginBottom: 20, gap: 10 },
+  filterBtn:        { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: t.border },
+  filterBtnActive:  { backgroundColor: t.accent },
+  filterText:       { fontWeight: '700', color: t.textSecondary },
   filterTextActive: { color: '#ffffff' },
 });

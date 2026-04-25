@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Animated, StyleSheet, Text } from "react-native";
+import { useTheme } from "../constants/theme";
 
 type Props = {
   summary: string;
@@ -8,9 +9,10 @@ type Props = {
 };
 
 export default function PlantCareTips({ summary, loading, error }: Props) {
+  const theme = useTheme();
+  const s = useMemo(() => styles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Fade the summary card in each time a new summary arrives
   useEffect(() => {
     if (summary) {
       fadeAnim.setValue(0);
@@ -42,29 +44,10 @@ export default function PlantCareTips({ summary, loading, error }: Props) {
   );
 }
 
-const s = StyleSheet.create({
-  errorBox: {
-    backgroundColor: '#fef2f2',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#fee2e2',
-  },
-  errorText: { color: '#dc2626', textAlign: 'center', fontWeight: '500' },
-  summaryBox: {
-    backgroundColor: '#ecfdf5',
-    padding: 24,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-  },
-  label: {
-    color: '#064e3b',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  summaryText: { color: '#1e293b', fontSize: 18, lineHeight: 28, fontWeight: '500' },
+const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
+  errorBox:    { backgroundColor: t.errorBg, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: t.errorBorder },
+  errorText:   { color: t.errorText, textAlign: 'center', fontWeight: '500' },
+  summaryBox:  { backgroundColor: t.surfaceGreen, padding: 24, borderRadius: 24, borderWidth: 1, borderColor: t.borderGreen },
+  label:       { color: t.textTitle, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  summaryText: { color: t.textPrimary, fontSize: 18, lineHeight: 28, fontWeight: '500' },
 });

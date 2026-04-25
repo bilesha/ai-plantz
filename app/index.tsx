@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,11 +13,15 @@ import {
 } from "react-native";
 import PlantCareTips from "../components/PlantCareTips";
 import { RANDOM_PLANTS } from "../constants/plants";
+import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
 import { PlantEntry } from "./types";
 
 export default function Index() {
   const router = useRouter();
+  const theme = useTheme();
+  const s = useMemo(() => styles(theme), [theme]);
+
   const [plant, setPlant] = useState("");
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +41,6 @@ export default function Index() {
 
     setLoading(true);
     setError(null);
-    // Previous summary stays visible while loading — only cleared on error
 
     try {
       const cached = history.find(p => p.name.toLowerCase() === target.toLowerCase());
@@ -67,7 +70,7 @@ export default function Index() {
       await AsyncStorage.setItem("plantHistory", JSON.stringify(updatedHistory));
 
     } catch (err: any) {
-      setSummary(""); // Clear stale summary so an error doesn't sit next to old results
+      setSummary("");
       const msg = err?.message ?? '';
       if (msg.includes('429')) {
         setError('Too many requests — wait a moment and try again.');
@@ -107,10 +110,7 @@ export default function Index() {
             <Text style={s.title}>🌿 LeafyAI</Text>
             <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
           </View>
-          <TouchableOpacity
-            style={s.btnHistoryIcon}
-            onPress={() => router.push("/history")}
-          >
+          <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/history")}>
             <Text style={{ fontSize: 24 }}>📜</Text>
           </TouchableOpacity>
         </View>
@@ -122,7 +122,7 @@ export default function Index() {
           style={s.input}
           value={plant}
           onChangeText={setPlant}
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={theme.textMuted}
         />
       </View>
 
@@ -148,7 +148,7 @@ export default function Index() {
           }}
         >
           {loading
-            ? <ActivityIndicator color="#065f46" size="small" />
+            ? <ActivityIndicator color={theme.accentDark} size="small" />
             : <Text style={s.btnRandomText}>Random</Text>
           }
         </TouchableOpacity>
@@ -167,10 +167,7 @@ export default function Index() {
               <TouchableOpacity
                 key={item.name}
                 style={s.pill}
-                onPress={() => {
-                  setPlant(item.name);
-                  setSummary(item.summary);
-                }}
+                onPress={() => { setPlant(item.name); setSummary(item.summary); }}
               >
                 <Text style={s.pillText}>{item.name}</Text>
               </TouchableOpacity>
@@ -196,29 +193,29 @@ export default function Index() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 24, paddingTop: 60, flexGrow: 1 },
-  header: { marginBottom: 32 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 32, fontWeight: '900', color: '#064e3b' },
-  subtitle: { fontSize: 16, color: '#64748b' },
-  inputCard: { backgroundColor: 'white', padding: 14, borderRadius: 20, marginBottom: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-  input: { fontSize: 18, color: '#1e293b' },
-  buttonRow: { flexDirection: 'row', gap: 12, marginBottom: 32 },
-  btnMain: { flex: 1, backgroundColor: '#059669', height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  btnDisabled: { backgroundColor: '#a7f3d0' },
-  btnMainText: { color: 'white', fontWeight: '700', fontSize: 18 },
-  btnRandom: { paddingHorizontal: 20, backgroundColor: '#ecfdf5', borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  btnRandomDisabled: { opacity: 0.5 },
-  btnRandomText: { color: '#065f46', fontWeight: '700' },
-  recentSection: { marginBottom: 24 },
-  recentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  recentTitle: { fontSize: 12, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
-  clearText: { fontSize: 12, color: '#f87171' },
-  pill: { backgroundColor: 'white', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, marginRight: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  pillText: { color: '#475569', fontWeight: '600' },
-  btnOutline: { marginTop: 16, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#059669', padding: 18, borderRadius: 20, alignItems: 'center' },
-  btnOutlineText: { color: '#065f46', fontWeight: '800', fontSize: 16 },
-  btnHistoryIcon: { backgroundColor: 'white', padding: 12, borderRadius: 18, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
+  container:        { flex: 1, backgroundColor: t.background },
+  content:          { padding: 24, paddingTop: 60, flexGrow: 1 },
+  header:           { marginBottom: 32 },
+  headerRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title:            { fontSize: 32, fontWeight: '900', color: t.textTitle },
+  subtitle:         { fontSize: 16, color: t.textSecondary },
+  inputCard:        { backgroundColor: t.surface, padding: 14, borderRadius: 20, marginBottom: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  input:            { fontSize: 18, color: t.textPrimary },
+  buttonRow:        { flexDirection: 'row', gap: 12, marginBottom: 32 },
+  btnMain:          { flex: 1, backgroundColor: t.accent, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  btnDisabled:      { backgroundColor: t.accentDisabled },
+  btnMainText:      { color: 'white', fontWeight: '700', fontSize: 18 },
+  btnRandom:        { paddingHorizontal: 20, backgroundColor: t.surfaceGreen, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  btnRandomDisabled:{ opacity: 0.5 },
+  btnRandomText:    { color: t.accentDark, fontWeight: '700' },
+  recentSection:    { marginBottom: 24 },
+  recentHeader:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  recentTitle:      { fontSize: 12, fontWeight: '800', color: t.textMuted, letterSpacing: 1 },
+  clearText:        { fontSize: 12, color: t.danger },
+  pill:             { backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, marginRight: 8, borderWidth: 1, borderColor: t.border },
+  pillText:         { color: t.textSecondary, fontWeight: '600' },
+  btnOutline:       { marginTop: 16, backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accent, padding: 18, borderRadius: 20, alignItems: 'center' },
+  btnOutlineText:   { color: t.accentDark, fontWeight: '800', fontSize: 16 },
+  btnHistoryIcon:   { backgroundColor: t.surface, padding: 12, borderRadius: 18, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
 });

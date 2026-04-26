@@ -1,6 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import * as Notifications from "expo-notifications";
 import { useTheme } from "../../constants/theme";
 import { getPlantTips } from "../../utilities/fetchPlantTips";
 import { fetchPlantImage } from "../../utilities/fetchPlantImage";
@@ -74,11 +76,15 @@ export default function PlantDetailsAiGenerated() {
   };
 
   const loadReminder = async (name: string) => {
-    const reminder = await getWateringReminder(name);
-    setActiveReminder(reminder);
+    try {
+      const reminder = await getWateringReminder(name);
+      setActiveReminder(reminder);
+    } catch {
+      // AsyncStorage failure is non-fatal — reminder section simply stays hidden
+    }
   };
 
-  const handleSetReminder = async (days: number) => {
+  const confirmSetReminder = async (days: number) => {
     try {
       await scheduleWateringReminder(safePlantName!, days);
       setActiveReminder({ id: '', intervalDays: days });
@@ -89,6 +95,22 @@ export default function PlantDetailsAiGenerated() {
         'Allow notifications in your device settings to set watering reminders.',
       );
     }
+  };
+
+  const handleSetReminder = async (days: number) => {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === 'undetermined') {
+      Alert.alert(
+        'Allow Notifications',
+        `LeafyAI will remind you to water your ${safePlantName} every ${days} days.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Continue', onPress: () => confirmSetReminder(days) },
+        ],
+      );
+      return;
+    }
+    await confirmSetReminder(days);
   };
 
   const handleCancelReminder = async () => {
@@ -125,7 +147,9 @@ export default function PlantDetailsAiGenerated() {
       </TouchableOpacity>
 
       {imageUrl && (
-        <Image source={{ uri: imageUrl }} style={d.heroImage} resizeMode="cover" />
+        <Animated.View entering={FadeIn.duration(600)} style={d.heroWrapper}>
+          <Image source={{ uri: imageUrl }} style={d.heroImage} resizeMode="cover" />
+        </Animated.View>
       )}
 
       <Text style={d.headerTitle}>{safePlantName}</Text>
@@ -143,14 +167,14 @@ export default function PlantDetailsAiGenerated() {
         <CardSkeleton />
       ) : (
         <View>
-          {CARD_ORDER.map(key => {
+          {CARD_ORDER.map((key, i) => {
             const value = details?.[key];
             if (!value) return null;
             return (
-              <View key={key} style={d.card}>
+              <Animated.View key={key} entering={FadeInDown.delay(i * 100).duration(400)} style={d.card}>
                 <Text style={d.cardLabel}>{key}</Text>
                 <Text style={d.cardValue}>{value}</Text>
-              </View>
+              </Animated.View>
             );
           })}
 
@@ -204,7 +228,8 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   container:       { flex: 1, backgroundColor: t.surface },
   content:         { padding: 24, paddingTop: 60 },
   backBtn:         { marginBottom: 24 },
-  heroImage:       { width: '100%', height: 220, borderRadius: 20, marginBottom: 24, backgroundColor: t.border },
+  heroWrapper:     { width: '100%', height: 220, borderRadius: 20, marginBottom: 24, backgroundColor: t.border, overflow: 'hidden' },
+  heroImage:       { width: '100%', height: '100%' },
   backText:        { color: t.accent, fontWeight: '700', fontSize: 16 },
   headerTitle:     { fontSize: 40, fontWeight: '900', color: t.textHeading },
   divider:         { height: 6, width: 60, backgroundColor: t.accentMid, borderRadius: 3, marginVertical: 16 },

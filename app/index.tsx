@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import PlantCareTips from "../components/PlantCareTips";
 import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
@@ -28,6 +29,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<PlantEntry[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
 
   const suggestions = useMemo(() => {
     const q = plant.trim().toLowerCase();
@@ -43,15 +45,18 @@ export default function Index() {
 
   useEffect(() => {
     (async () => {
-      const saved = await AsyncStorage.getItem("plantHistory");
+      const [saved, seen] = await Promise.all([
+        AsyncStorage.getItem("plantHistory"),
+        AsyncStorage.getItem("seen_welcome"),
+      ]);
       if (saved) setHistory(JSON.parse(saved));
+      setShowWelcome(!seen);
     })();
   }, []);
 
-  const handleSelectSuggestion = (name: string) => {
-    setPlant(name);
-    setShowSuggestions(false);
-    handleGetTips(name);
+  const dismissWelcome = async () => {
+    setShowWelcome(false);
+    await AsyncStorage.setItem("seen_welcome", "1");
   };
 
   const handleGetTips = async (nameToSearch?: string) => {
@@ -103,6 +108,12 @@ export default function Index() {
     }
   };
 
+  const handleSelectSuggestion = (name: string) => {
+    setPlant(name);
+    setShowSuggestions(false);
+    handleGetTips(name);
+  };
+
   const handleClearHistory = () => {
     Alert.alert(
       'Clear history',
@@ -135,6 +146,18 @@ export default function Index() {
         </View>
       </View>
 
+      {showWelcome === true && (
+        <Animated.View entering={FadeInDown.duration(400)} style={s.welcomeCard}>
+          <Text style={s.welcomeTitle}>Welcome to LeafyAI 🌿</Text>
+          <Text style={s.welcomeBody}>
+            Search any plant for instant AI care tips. Tap Random to explore, save favourites, and set watering reminders on any plant page.
+          </Text>
+          <TouchableOpacity style={s.welcomeBtn} onPress={dismissWelcome}>
+            <Text style={s.welcomeBtnText}>Got it →</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <View style={s.inputWrapper}>
         <View style={s.inputCard}>
           <TextInput
@@ -150,7 +173,7 @@ export default function Index() {
           />
         </View>
         {showSuggestions && suggestions.length > 0 && (
-          <View style={s.dropdown}>
+          <Animated.View entering={FadeInDown.duration(180)} style={s.dropdown}>
             {suggestions.map((name, i) => (
               <TouchableOpacity
                 key={name}
@@ -160,7 +183,7 @@ export default function Index() {
                 <Text style={s.suggestionText}>{name}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </Animated.View>
         )}
       </View>
 
@@ -238,6 +261,11 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   headerRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title:            { fontSize: 32, fontWeight: '900', color: t.textTitle },
   subtitle:         { fontSize: 16, color: t.textSecondary },
+  welcomeCard:      { backgroundColor: t.surfaceGreen, borderWidth: 1, borderColor: t.borderGreen, borderRadius: 20, padding: 20, marginBottom: 20 },
+  welcomeTitle:     { fontSize: 18, fontWeight: '800', color: t.textTitle, marginBottom: 8 },
+  welcomeBody:      { fontSize: 14, color: t.textSecondary, lineHeight: 22, marginBottom: 16 },
+  welcomeBtn:       { alignSelf: 'flex-end', backgroundColor: t.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
+  welcomeBtnText:   { color: '#fff', fontWeight: '700', fontSize: 14 },
   inputWrapper:     { marginBottom: 16, zIndex: 100 },
   inputCard:        { backgroundColor: t.surface, padding: 14, borderRadius: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   input:            { fontSize: 18, color: t.textPrimary },

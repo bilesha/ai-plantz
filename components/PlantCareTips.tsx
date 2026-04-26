@@ -11,16 +11,17 @@ type Props = {
 export default function PlantCareTips({ summary, loading, error }: Props) {
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
     if (summary) {
       fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
+      slideAnim.setValue(12);
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
     }
   }, [summary]);
 
@@ -37,7 +38,7 @@ export default function PlantCareTips({ summary, loading, error }: Props) {
   if (!summary) return null;
 
   return (
-    <Animated.View style={[s.summaryBox, { opacity: fadeAnim }]}>
+    <Animated.View style={[s.summaryBox, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <Text style={s.label}>AI Summary</Text>
       <Text style={s.summaryText}>"{summary}"</Text>
     </Animated.View>

@@ -14,7 +14,11 @@
       "Bash(npx tsc *2)",
       "Bash(npx tsc *)",
       "Bash(npx expo *)",
-      "Bash(node -e \"console.log\\(require\\('./node_modules/expo-notifications/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./node_modules/expo-notifications/package.json'\\).version\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest', {}\\), indent=2\\)\\)\")",
+      "Bash(node -e \"const n = require\\('./node_modules/expo-notifications'\\); console.log\\(Object.keys\\(n.SchedulableTriggerInputTypes || {}\\)\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)"
     ]
   }
 }

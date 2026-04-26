@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
 import type { PlantEntry } from "../types";
 import { toggleFavoriteLogic, sortHistoryByDate } from "../logic/historyLogic";
@@ -28,7 +29,7 @@ export default function HistoryScreen() {
 
   useFocusEffect(useCallback(() => { loadHistory(); }, []));
 
-  const toggleFavorite = async (plantName: string) => {
+  const toggleFavorite = useCallback(async (plantName: string) => {
     const updated = toggleFavoriteLogic(history, plantName);
     setHistory(updated);
     try {
@@ -36,9 +37,9 @@ export default function HistoryScreen() {
     } catch {
       setHistory(history);
     }
-  };
+  }, [history]);
 
-  const deleteItem = async (plantName: string) => {
+  const deleteItem = useCallback(async (plantName: string) => {
     const updated = history.filter(p => p.name !== plantName);
     setHistory(updated);
     try {
@@ -46,7 +47,7 @@ export default function HistoryScreen() {
     } catch {
       setHistory(history);
     }
-  };
+  }, [history]);
 
   const displayedHistory = useMemo(() => {
     const filtered = showFavoritesOnly
@@ -55,7 +56,8 @@ export default function HistoryScreen() {
     return sortHistoryByDate(filtered);
   }, [history, showFavoritesOnly]);
 
-  const renderItem = ({ item }: { item: PlantEntry }) => (
+  const renderItem = useCallback(({ item, index }: { item: PlantEntry; index: number }) => (
+    <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
     <View style={s.card}>
       <TouchableOpacity
         style={s.cardContentWrapper}
@@ -78,7 +80,8 @@ export default function HistoryScreen() {
         <Text style={s.deleteIcon}>✕</Text>
       </TouchableOpacity>
     </View>
-  );
+    </Animated.View>
+  ), [s, router, toggleFavorite, deleteItem]);
 
   if (isLoading) {
     return (

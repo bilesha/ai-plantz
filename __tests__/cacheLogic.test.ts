@@ -1,6 +1,11 @@
 // __tests__/cacheLogic.test.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getPlantDetailsFromCache, savePlantDetailsToCache } from '../app/logic/cacheLogic';
+import {
+  getPlantDetailsFromCache,
+  savePlantDetailsToCache,
+  getPlantImageFromCache,
+  savePlantImageToCache,
+} from '../app/logic/cacheLogic';
 import { PlantDetails } from '../app/types';
 
 // Jest replaces the real AsyncStorage module with this official in-memory mock
@@ -116,5 +121,56 @@ describe('savePlantDetailsToCache', () => {
     expect(result!.watering).toBe('Low');
     expect(result!.light).toBe('Any');
     expect(result!.fertilizer).toBe('None');
+  });
+});
+
+describe('getPlantImageFromCache', () => {
+  test('returns undefined when the key has never been written (not-yet-fetched)', async () => {
+    // undefined means "go fetch from Wikipedia"; null means "fetched, no image found".
+    // These two states must be distinguishable so we never skip a fetch that hasn't happened yet.
+    expect(await getPlantImageFromCache('Monstera')).toBeUndefined();
+  });
+
+  test('returns null when the key was saved as "no image" (sentinel value)', async () => {
+    await AsyncStorage.setItem('image_Monstera', '__no_image__');
+    expect(await getPlantImageFromCache('Monstera')).toBeNull();
+  });
+
+  test('returns the URL string when a real image URL is stored', async () => {
+    await AsyncStorage.setItem('image_Monstera', 'https://upload.wikimedia.org/monstera.jpg');
+    expect(await getPlantImageFromCache('Monstera')).toBe('https://upload.wikimedia.org/monstera.jpg');
+  });
+
+  test('uses the key image_<plantName> — not a bare plant name', async () => {
+    await AsyncStorage.setItem('Monstera', 'https://example.com/img.jpg');
+    expect(await getPlantImageFromCache('Monstera')).toBeUndefined();
+  });
+});
+
+describe('savePlantImageToCache', () => {
+  test('round-trip: saving a URL and reading it back returns the same URL', async () => {
+    await savePlantImageToCache('Pothos', 'https://upload.wikimedia.org/pothos.jpg');
+    expect(await getPlantImageFromCache('Pothos')).toBe('https://upload.wikimedia.org/pothos.jpg');
+  });
+
+  test('round-trip: saving null and reading it back returns null (not undefined)', async () => {
+    // After a successful Wikipedia fetch that returned no image, we cache null so we
+    // do not re-fetch on every visit. Reading back must return null, not undefined.
+    await savePlantImageToCache('Rare Plant', null);
+    expect(await getPlantImageFromCache('Rare Plant')).toBeNull();
+  });
+
+  test('overwrites a previous URL with a new one', async () => {
+    await savePlantImageToCache('Fern', 'https://old.jpg');
+    await savePlantImageToCache('Fern', 'https://new.jpg');
+    expect(await getPlantImageFromCache('Fern')).toBe('https://new.jpg');
+  });
+
+  test('caches each plant under its own independent key', async () => {
+    await savePlantImageToCache('Cactus', 'https://cactus.jpg');
+    await savePlantImageToCache('Fern', null);
+
+    expect(await getPlantImageFromCache('Cactus')).toBe('https://cactus.jpg');
+    expect(await getPlantImageFromCache('Fern')).toBeNull();
   });
 });

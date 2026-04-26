@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import PlantCareTips from "../components/PlantCareTips";
-import { RANDOM_PLANTS } from "../constants/plants";
+import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
 import { PlantEntry } from "./types";
@@ -27,6 +27,19 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<PlantEntry[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const suggestions = useMemo(() => {
+    const q = plant.trim().toLowerCase();
+    if (!q) return [];
+    const historySuggestions = history
+      .map(p => p.name)
+      .filter(name => name.toLowerCase().includes(q));
+    const staticSuggestions = PLANT_SUGGESTIONS
+      .filter(name => name.toLowerCase().includes(q))
+      .filter(name => !historySuggestions.some(h => h.toLowerCase() === name.toLowerCase()));
+    return [...historySuggestions, ...staticSuggestions].slice(0, 6);
+  }, [plant, history]);
 
   useEffect(() => {
     (async () => {
@@ -34,6 +47,12 @@ export default function Index() {
       if (saved) setHistory(JSON.parse(saved));
     })();
   }, []);
+
+  const handleSelectSuggestion = (name: string) => {
+    setPlant(name);
+    setShowSuggestions(false);
+    handleGetTips(name);
+  };
 
   const handleGetTips = async (nameToSearch?: string) => {
     const target = nameToSearch || plant;
@@ -103,7 +122,7 @@ export default function Index() {
   };
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
+    <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <View style={s.header}>
         <View style={s.headerRow}>
           <View>
@@ -116,14 +135,33 @@ export default function Index() {
         </View>
       </View>
 
-      <View style={s.inputCard}>
-        <TextInput
-          placeholder="Search a plant..."
-          style={s.input}
-          value={plant}
-          onChangeText={setPlant}
-          placeholderTextColor={theme.textMuted}
-        />
+      <View style={s.inputWrapper}>
+        <View style={s.inputCard}>
+          <TextInput
+            placeholder="Search a plant..."
+            style={s.input}
+            value={plant}
+            onChangeText={(text) => { setPlant(text); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            placeholderTextColor={theme.textMuted}
+            returnKeyType="search"
+            onSubmitEditing={() => { setShowSuggestions(false); handleGetTips(); }}
+          />
+        </View>
+        {showSuggestions && suggestions.length > 0 && (
+          <View style={s.dropdown}>
+            {suggestions.map((name, i) => (
+              <TouchableOpacity
+                key={name}
+                style={[s.suggestionRow, i < suggestions.length - 1 && s.suggestionBorder]}
+                onPress={() => handleSelectSuggestion(name)}
+              >
+                <Text style={s.suggestionText}>{name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={s.buttonRow}>
@@ -200,8 +238,13 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   headerRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title:            { fontSize: 32, fontWeight: '900', color: t.textTitle },
   subtitle:         { fontSize: 16, color: t.textSecondary },
-  inputCard:        { backgroundColor: t.surface, padding: 14, borderRadius: 20, marginBottom: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  inputWrapper:     { marginBottom: 16, zIndex: 100 },
+  inputCard:        { backgroundColor: t.surface, padding: 14, borderRadius: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   input:            { fontSize: 18, color: t.textPrimary },
+  dropdown:         { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: t.surface, borderRadius: 16, marginTop: 4, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, overflow: 'hidden', zIndex: 101 },
+  suggestionRow:    { paddingHorizontal: 18, paddingVertical: 14 },
+  suggestionBorder: { borderBottomWidth: 1, borderBottomColor: t.border },
+  suggestionText:   { fontSize: 16, color: t.textPrimary },
   buttonRow:        { flexDirection: 'row', gap: 12, marginBottom: 32 },
   btnMain:          { flex: 1, backgroundColor: t.accent, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   btnDisabled:      { backgroundColor: t.accentDisabled },

@@ -9,5 +9,13 @@ export default {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       GEMINI_API_KEY: process.env.GEMINI_API_KEY
     },
+    plugins: [
+      [
+        "expo-notifications",
+        {
+          color: "#059669",
+        },
+      ],
+    ],
   },
 }; 

@@ -12,7 +12,9 @@
       "Bash(cat babel.config.json)",
       "Bash(npm install *)",
       "Bash(npx tsc *2)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npx expo *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/expo-notifications/package.json'\\).version\\)\")"
     ]
   }
 }

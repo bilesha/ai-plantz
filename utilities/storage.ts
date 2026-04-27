@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { PlantEntry } from "../app/types";
+import type { PlantEntry } from "../types";
 const STORAGE_KEY = "plantHistory";
 
 export const savePlant = async (newEntry: PlantEntry) => {

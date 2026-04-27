@@ -5,8 +5,8 @@ import {
   savePlantDetailsToCache,
   getPlantImageFromCache,
   savePlantImageToCache,
-} from '../app/logic/cacheLogic';
-import { PlantDetails } from '../app/types';
+} from '../logic/cacheLogic';
+import { PlantDetails } from '../types';
 
 // Jest replaces the real AsyncStorage module with this official in-memory mock
 // from the package itself. It behaves exactly like AsyncStorage but stores

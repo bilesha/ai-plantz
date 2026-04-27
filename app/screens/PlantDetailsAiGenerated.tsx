@@ -7,9 +7,9 @@ import { useTheme } from "../../constants/theme";
 import { getPlantTips } from "../../utilities/fetchPlantTips";
 import { fetchPlantImage } from "../../utilities/fetchPlantImage";
 import { CardSkeleton } from "../../components/SkeletonLoader";
-import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../logic/cacheLogic";
-import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../logic/reminderLogic";
-import { PlantDetails } from "../types";
+import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
+import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
+import { PlantDetails } from "../../types";
 
 const REMINDER_OPTIONS = [
   { days: 3,  label: '3 days' },

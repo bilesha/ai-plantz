@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
-import type { PlantEntry } from "../types";
-import { toggleFavoriteLogic, sortHistoryByDate } from "../logic/historyLogic";
+import type { PlantEntry } from "../../types";
+import { toggleFavoriteLogic, sortHistoryByDate } from "../../logic/historyLogic";
 
 export default function HistoryScreen() {
   const router = useRouter();

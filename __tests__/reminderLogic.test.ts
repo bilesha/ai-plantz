@@ -20,7 +20,7 @@ import {
   scheduleWateringReminder,
   cancelWateringReminder,
   getWateringReminder,
-} from '../app/logic/reminderLogic';
+} from '../logic/reminderLogic';
 
 const mockPermissions  = Notifications.requestPermissionsAsync  as jest.Mock;
 const mockSchedule     = Notifications.scheduleNotificationAsync as jest.Mock;

@@ -1,5 +1,5 @@
 // __tests__/history.test.ts
-import { sortHistoryByDate, toggleFavoriteLogic } from '../app/logic/historyLogic'; // Point to the file location
+import { sortHistoryByDate, toggleFavoriteLogic } from '../logic/historyLogic';
 
 describe('Toggle Favourite', () => {
   const baseHistory = [

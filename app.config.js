@@ -4,6 +4,7 @@ export default {
   expo: {
     name: "ai-plantz",
     slug: "ai-plantz",
+    scheme: "ai-plantz",
     version: "1.0.0",
     splash: {
       image: './assets/images/splash-icon.png',

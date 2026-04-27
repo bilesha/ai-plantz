@@ -16,7 +16,7 @@ import PlantCareTips from "../components/PlantCareTips";
 import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
-import { PlantEntry } from "./types";
+import { PlantEntry } from "../types";
 
 export default function Index() {
   const router = useRouter();

@@ -37,4 +37,8 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Claude logs
+claude-logs/
+.claude/claude logs/
+*.txt
 app-example

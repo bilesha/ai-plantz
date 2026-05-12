@@ -63,7 +63,7 @@ export default function HistoryScreen() {
         style={s.cardContentWrapper}
         onPress={() => router.push({
           pathname: "/screens/PlantDetailsAiGenerated",
-          params: { plantName: item.name },
+          params: { plantName: item.name, summary: item.summary },
         })}
       >
         <View style={s.textContainer}>

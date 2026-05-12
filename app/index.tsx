@@ -140,9 +140,14 @@ export default function Index() {
             <Text style={s.title}>🌿 LeafyAI</Text>
             <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
           </View>
-          <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/history")}>
-            <Text style={{ fontSize: 24 }}>📜</Text>
-          </TouchableOpacity>
+          <View style={s.headerIcons}>
+            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/screens/collection")}>
+              <Text style={{ fontSize: 24 }}>🪴</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/history")}>
+              <Text style={{ fontSize: 24 }}>📜</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -244,7 +249,7 @@ export default function Index() {
           style={s.btnOutline}
           onPress={() => router.push({
             pathname: "/screens/PlantDetailsAiGenerated",
-            params: { plantName: plant },
+            params: { plantName: plant, summary },
           })}
         >
           <Text style={s.btnOutlineText}>View Detailed Guide →</Text>
@@ -288,5 +293,6 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   pillText:         { color: t.textSecondary, fontWeight: '600' },
   btnOutline:       { marginTop: 16, backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accent, padding: 18, borderRadius: 20, alignItems: 'center' },
   btnOutlineText:   { color: t.accentDark, fontWeight: '800', fontSize: 16 },
+  headerIcons:      { flexDirection: 'row', gap: 10 },
   btnHistoryIcon:   { backgroundColor: t.surface, padding: 12, borderRadius: 18, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
 });

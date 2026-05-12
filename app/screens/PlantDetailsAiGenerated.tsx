@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import * as Notifications from "expo-notifications";
 import { useTheme } from "../../constants/theme";
@@ -9,6 +9,8 @@ import { fetchPlantImage } from "../../utilities/fetchPlantImage";
 import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
+import { addToCollection, removeFromCollection, isInCollection } from "../../logic/collectionLogic";
+import { logWatering, getWateringLog, formatRelativeDate } from "../../logic/wateringLogic";
 import { PlantDetails } from "../../types";
 
 const REMINDER_OPTIONS = [
@@ -21,8 +23,9 @@ const REMINDER_OPTIONS = [
 const CARD_ORDER: (keyof PlantDetails)[] = ['watering', 'light', 'fertilizer'];
 
 export default function PlantDetailsAiGenerated() {
-  const { plantName } = useLocalSearchParams();
+  const { plantName, summary: summaryParam } = useLocalSearchParams();
   const safePlantName = Array.isArray(plantName) ? plantName[0] : plantName;
+  const routeSummary = Array.isArray(summaryParam) ? summaryParam[0] : (summaryParam ?? '');
   const router = useRouter();
   const theme = useTheme();
   const d = useMemo(() => styles(theme), [theme]);
@@ -33,6 +36,8 @@ export default function PlantDetailsAiGenerated() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [activeReminder, setActiveReminder] = useState<WateringReminder | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [inCollection, setInCollection] = useState(false);
+  const [wateringLog, setWateringLog] = useState<number[]>([]);
 
   const fetchDetails = async (name: string) => {
     setLoading(true);
@@ -84,6 +89,55 @@ export default function PlantDetailsAiGenerated() {
     }
   };
 
+  const loadCollectionStatus = async (name: string) => {
+    try {
+      setInCollection(await isInCollection(name));
+    } catch {}
+  };
+
+  const loadWateringLog = async (name: string) => {
+    try {
+      setWateringLog(await getWateringLog(name));
+    } catch {}
+  };
+
+  const handleLogWatering = async () => {
+    if (!safePlantName) return;
+    await logWatering(safePlantName);
+    setWateringLog(await getWateringLog(safePlantName));
+  };
+
+  const handleShare = async () => {
+    if (!details || !safePlantName) return;
+    try {
+      await Share.share({
+        title: `${safePlantName} Care Tips`,
+        message: [
+          `🌿 ${safePlantName} Care Tips`,
+          '',
+          `💧 Watering\n${details.watering}`,
+          '',
+          `☀️ Light\n${details.light}`,
+          '',
+          `🌱 Fertilizer\n${details.fertilizer}`,
+          '',
+          'Shared from LeafyAI',
+        ].join('\n'),
+      });
+    } catch {}
+  };
+
+  const handleToggleCollection = async () => {
+    if (!safePlantName) return;
+    if (inCollection) {
+      await removeFromCollection(safePlantName);
+      setInCollection(false);
+    } else {
+      await addToCollection({ name: safePlantName, summary: routeSummary, details: details ?? undefined, addedAt: Date.now() });
+      setInCollection(true);
+    }
+  };
+
   const confirmSetReminder = async (days: number) => {
     try {
       await scheduleWateringReminder(safePlantName!, days);
@@ -123,15 +177,19 @@ export default function PlantDetailsAiGenerated() {
       fetchDetails(safePlantName);
       loadImage(safePlantName);
       loadReminder(safePlantName);
+      loadCollectionStatus(safePlantName);
+      loadWateringLog(safePlantName);
     }
   }, [safePlantName]);
 
   if (!safePlantName) {
     return (
       <View style={d.container}>
-        <TouchableOpacity onPress={() => router.back()} style={d.backBtn}>
-          <Text style={d.backText}>← Back to Search</Text>
-        </TouchableOpacity>
+        <View style={d.topBar}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={d.backText}>← Back to Search</Text>
+          </TouchableOpacity>
+        </View>
         <View style={d.errorContainer}>
           <Text style={d.errorIcon}>🌿</Text>
           <Text style={d.errorText}>No plant selected.</Text>
@@ -142,9 +200,16 @@ export default function PlantDetailsAiGenerated() {
 
   return (
     <ScrollView style={d.container} contentContainerStyle={d.content}>
-      <TouchableOpacity onPress={() => router.back()} style={d.backBtn}>
-        <Text style={d.backText}>← Back to Search</Text>
-      </TouchableOpacity>
+      <View style={d.topBar}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={d.backText}>← Back to Search</Text>
+        </TouchableOpacity>
+        {details && (
+          <TouchableOpacity onPress={handleShare} style={d.shareBtn}>
+            <Text style={d.shareBtnText}>Share</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {imageUrl && (
         <Animated.View entering={FadeIn.duration(600)} style={d.heroWrapper}>
@@ -177,6 +242,15 @@ export default function PlantDetailsAiGenerated() {
               </Animated.View>
             );
           })}
+
+          <TouchableOpacity
+            style={inCollection ? d.collectionBtnSaved : d.collectionBtn}
+            onPress={handleToggleCollection}
+          >
+            <Text style={inCollection ? d.collectionBtnSavedText : d.collectionBtnText}>
+              {inCollection ? '🪴 Saved to Collection' : '+ Save to Collection'}
+            </Text>
+          </TouchableOpacity>
 
           {Platform.OS !== 'web' && (
             <View style={d.reminderSection}>
@@ -218,6 +292,27 @@ export default function PlantDetailsAiGenerated() {
               )}
             </View>
           )}
+
+          <View style={d.logSection}>
+            <TouchableOpacity style={d.logBtn} onPress={handleLogWatering}>
+              <Text style={d.logBtnText}>💧 Log Watering</Text>
+            </TouchableOpacity>
+
+            {wateringLog.length > 0 && (
+              <View style={d.logHistory}>
+                <Text style={d.logHistoryLabel}>WATERING HISTORY</Text>
+                {wateringLog.slice(0, 5).map((ts, i) => (
+                  <View
+                    key={ts}
+                    style={[d.logEntry, i < Math.min(wateringLog.length, 5) - 1 && d.logEntryBorder]}
+                  >
+                    <View style={d.logDot} />
+                    <Text style={d.logEntryDate}>{formatRelativeDate(ts)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       )}
     </ScrollView>
@@ -227,7 +322,9 @@ export default function PlantDetailsAiGenerated() {
 const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   container:       { flex: 1, backgroundColor: t.surface },
   content:         { padding: 24, paddingTop: 60 },
-  backBtn:         { marginBottom: 24 },
+  topBar:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  shareBtn:        { padding: 8 },
+  shareBtnText:    { color: t.accent, fontWeight: '700', fontSize: 16 },
   heroWrapper:     { width: '100%', height: 220, borderRadius: 20, marginBottom: 24, backgroundColor: t.border, overflow: 'hidden' },
   heroImage:       { width: '100%', height: '100%' },
   backText:        { color: t.accent, fontWeight: '700', fontSize: 16 },
@@ -236,6 +333,10 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   card:            { backgroundColor: t.background, padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: t.accentMid },
   cardLabel:       { fontSize: 12, fontWeight: '900', color: t.accent, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   cardValue:       { fontSize: 17, color: t.textBody, lineHeight: 26 },
+  collectionBtn:           { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 12 },
+  collectionBtnText:       { color: t.accent, fontWeight: '700', fontSize: 15 },
+  collectionBtnSaved:      { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1.5, borderColor: t.accentMid, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 12 },
+  collectionBtnSavedText:  { color: t.accentDark, fontWeight: '700', fontSize: 15 },
   reminderSection:     { marginTop: 8 },
   reminderSetBtn:      { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center' },
   reminderSetText:     { color: t.accentDark, fontWeight: '700', fontSize: 15 },
@@ -247,6 +348,15 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   reminderActive:      { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.borderGreen, padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   reminderActiveText:  { color: t.accentDark, fontWeight: '600', fontSize: 14 },
   reminderDismiss:     { color: t.danger, fontSize: 13, fontWeight: '600' },
+  logSection:      { marginTop: 16, paddingBottom: 16 },
+  logBtn:          { backgroundColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 16 },
+  logBtnText:      { color: '#fff', fontWeight: '700', fontSize: 15 },
+  logHistory:      { backgroundColor: t.background, borderRadius: 20, padding: 16 },
+  logHistoryLabel: { fontSize: 12, fontWeight: '800', color: t.textMuted, letterSpacing: 1, marginBottom: 12 },
+  logEntry:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  logEntryBorder:  { borderBottomWidth: 1, borderBottomColor: t.border },
+  logDot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: t.accentMid, marginRight: 12 },
+  logEntryDate:    { fontSize: 15, color: t.textBody },
   errorContainer:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   errorIcon:       { fontSize: 50, marginBottom: 20 },
   errorText:       { fontSize: 16, color: t.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 22 },

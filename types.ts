@@ -11,3 +11,10 @@ export type PlantEntry = {
   isFavorite: boolean;
   lastViewed: number;
 };
+
+export type CollectionEntry = {
+  name: string;
+  summary: string;
+  details?: PlantDetails;
+  addedAt: number;
+};

@@ -16,6 +16,7 @@ import PlantCareTips from "../components/PlantCareTips";
 import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
+import { removeHistoryItem } from "../logic/historyLogic";
 import { PlantEntry } from "../types";
 
 export default function Index() {
@@ -112,6 +113,12 @@ export default function Index() {
     setPlant(name);
     setShowSuggestions(false);
     handleGetTips(name);
+  };
+
+  const handleRemoveItem = async (name: string) => {
+    const updated = removeHistoryItem(history, name);
+    setHistory(updated);
+    await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
   };
 
   const handleClearHistory = () => {
@@ -230,13 +237,14 @@ export default function Index() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {history.map((item) => (
-              <TouchableOpacity
-                key={item.name}
-                style={s.pill}
-                onPress={() => { setPlant(item.name); setSummary(item.summary); }}
-              >
-                <Text style={s.pillText}>{item.name}</Text>
-              </TouchableOpacity>
+              <View key={item.name} style={s.chip}>
+                <TouchableOpacity onPress={() => { setPlant(item.name); handleGetTips(item.name); }}>
+                  <Text style={s.pillText}>{item.name}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleRemoveItem(item.name)} hitSlop={8}>
+                  <Text style={s.chipX}>×</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
         </View>
@@ -289,8 +297,9 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   recentHeader:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   recentTitle:      { fontSize: 12, fontWeight: '800', color: t.textMuted, letterSpacing: 1 },
   clearText:        { fontSize: 12, color: t.danger },
-  pill:             { backgroundColor: t.surface, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, marginRight: 8, borderWidth: 1, borderColor: t.border },
+  chip:             { flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, marginRight: 8, borderWidth: 1, borderColor: t.border, gap: 6 },
   pillText:         { color: t.textSecondary, fontWeight: '600' },
+  chipX:            { color: t.textMuted, fontSize: 16, lineHeight: 18, fontWeight: '400' },
   btnOutline:       { marginTop: 16, backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accent, padding: 18, borderRadius: 20, alignItems: 'center' },
   btnOutlineText:   { color: t.accentDark, fontWeight: '800', fontSize: 16 },
   headerIcons:      { flexDirection: 'row', gap: 10 },

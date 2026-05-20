@@ -12,3 +12,6 @@ export const toggleFavoriteLogic = (history: PlantEntry[], plantName: string): P
 export const sortHistoryByDate = (history: PlantEntry[]): PlantEntry[] => {
   return [...history].sort((a, b) => b.lastViewed - a.lastViewed);
 };
+
+export const removeHistoryItem = (history: PlantEntry[], name: string): PlantEntry[] =>
+  history.filter(p => p.name.toLowerCase() !== name.toLowerCase());

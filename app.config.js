@@ -6,6 +6,7 @@ export default {
     slug: "ai-plantz",
     scheme: "ai-plantz",
     version: "1.0.0",
+    userInterfaceStyle: "automatic",
     splash: {
       image: './assets/images/splash-icon.png',
       resizeMode: 'contain',

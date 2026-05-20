@@ -19,7 +19,7 @@ const app = express();
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || "http://localhost:8081" }));
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -108,6 +108,6 @@ app.post("/api/plant-tips", plantTipsLimiter, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });

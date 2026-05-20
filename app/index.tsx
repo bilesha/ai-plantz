@@ -13,16 +13,36 @@ import {
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import PlantCareTips from "../components/PlantCareTips";
-import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
+import { getDailyPlant, PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
 import { removeHistoryItem } from "../logic/historyLogic";
 import { PlantEntry } from "../types";
 
+const TOUR_STEPS = [
+  {
+    icon: '🔍',
+    title: 'Search any plant',
+    body: 'Type a plant name or tap the Plant of the Day card. LeafyAI fetches AI-powered care tips instantly.',
+  },
+  {
+    icon: '🪴',
+    title: 'Save & set reminders',
+    body: "Open any plant's detail page to add it to your Collection and schedule watering reminders.",
+  },
+  {
+    icon: '📜',
+    title: 'History & settings',
+    body: 'Recent searches appear as quick-access chips below the buttons. Use ⚙️ to manage reminders and clear your data.',
+  },
+];
+
 export default function Index() {
   const router = useRouter();
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
+
+  const dailyPlant = useMemo(() => getDailyPlant(), []);
 
   const [plant, setPlant] = useState("");
   const [summary, setSummary] = useState("");
@@ -30,7 +50,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<PlantEntry[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
+  const [tourStep, setTourStep] = useState<number | null>(null);
 
   const suggestions = useMemo(() => {
     const q = plant.trim().toLowerCase();
@@ -51,13 +71,18 @@ export default function Index() {
         AsyncStorage.getItem("seen_welcome"),
       ]);
       if (saved) setHistory(JSON.parse(saved));
-      setShowWelcome(!seen);
+      setTourStep(seen ? null : 0);
     })();
   }, []);
 
-  const dismissWelcome = async () => {
-    setShowWelcome(false);
-    await AsyncStorage.setItem("seen_welcome", "1");
+  const advanceTour = async () => {
+    if (tourStep === null) return;
+    if (tourStep < TOUR_STEPS.length - 1) {
+      setTourStep(tourStep + 1);
+    } else {
+      setTourStep(null);
+      await AsyncStorage.setItem("seen_welcome", "1");
+    }
   };
 
   const handleGetTips = async (nameToSearch?: string) => {
@@ -161,17 +186,34 @@ export default function Index() {
         </View>
       </View>
 
-      {showWelcome === true && (
-        <Animated.View entering={FadeInDown.duration(400)} style={s.welcomeCard}>
-          <Text style={s.welcomeTitle}>Welcome to LeafyAI 🌿</Text>
-          <Text style={s.welcomeBody}>
-            Search any plant for instant AI care tips. Tap Random to explore, save favourites, and set watering reminders on any plant page.
-          </Text>
-          <TouchableOpacity style={s.welcomeBtn} onPress={dismissWelcome}>
-            <Text style={s.welcomeBtnText}>Got it →</Text>
-          </TouchableOpacity>
+      {tourStep !== null && (
+        <Animated.View key={tourStep} entering={FadeInDown.duration(300)} style={s.welcomeCard}>
+          <Text style={s.tourIcon}>{TOUR_STEPS[tourStep].icon}</Text>
+          <Text style={s.welcomeTitle}>{TOUR_STEPS[tourStep].title}</Text>
+          <Text style={s.welcomeBody}>{TOUR_STEPS[tourStep].body}</Text>
+          <View style={s.tourFooter}>
+            <View style={s.tourDots}>
+              {TOUR_STEPS.map((_, i) => (
+                <View key={i} style={[s.tourDot, i === tourStep && s.tourDotActive]} />
+              ))}
+            </View>
+            <TouchableOpacity style={s.welcomeBtn} onPress={advanceTour}>
+              <Text style={s.welcomeBtnText}>
+                {tourStep < TOUR_STEPS.length - 1 ? 'Next →' : 'Get started →'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       )}
+
+      <TouchableOpacity
+        style={s.potdCard}
+        onPress={() => { setPlant(dailyPlant); handleGetTips(dailyPlant); }}
+      >
+        <Text style={s.potdLabel}>PLANT OF THE DAY</Text>
+        <Text style={s.potdName}>{dailyPlant}</Text>
+        <Text style={s.potdCta}>Get care tips →</Text>
+      </TouchableOpacity>
 
       <View style={s.inputWrapper}>
         <View style={s.inputCard}>
@@ -278,10 +320,19 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   title:            { fontSize: 32, fontWeight: '900', color: t.textTitle },
   subtitle:         { fontSize: 16, color: t.textSecondary },
   welcomeCard:      { backgroundColor: t.surfaceGreen, borderWidth: 1, borderColor: t.borderGreen, borderRadius: 20, padding: 20, marginBottom: 20 },
+  tourIcon:         { fontSize: 28, marginBottom: 10 },
   welcomeTitle:     { fontSize: 18, fontWeight: '800', color: t.textTitle, marginBottom: 8 },
   welcomeBody:      { fontSize: 14, color: t.textSecondary, lineHeight: 22, marginBottom: 16 },
-  welcomeBtn:       { alignSelf: 'flex-end', backgroundColor: t.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
+  tourFooter:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tourDots:         { flexDirection: 'row', gap: 6 },
+  tourDot:          { width: 6, height: 6, borderRadius: 3, backgroundColor: t.borderGreen },
+  tourDotActive:    { backgroundColor: t.accent, width: 18 },
+  welcomeBtn:       { backgroundColor: t.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
   welcomeBtnText:   { color: '#fff', fontWeight: '700', fontSize: 14 },
+  potdCard:     { backgroundColor: t.surface, borderRadius: 20, padding: 20, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: t.accent, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  potdLabel:    { fontSize: 11, fontWeight: '800', color: t.textMuted, letterSpacing: 1, marginBottom: 6 },
+  potdName:     { fontSize: 22, fontWeight: '900', color: t.textTitle, marginBottom: 8 },
+  potdCta:      { fontSize: 14, fontWeight: '700', color: t.accent },
   inputWrapper:     { marginBottom: 16, zIndex: 100 },
   inputCard:        { backgroundColor: t.surface, padding: 14, borderRadius: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   input:            { fontSize: 18, color: t.textPrimary },

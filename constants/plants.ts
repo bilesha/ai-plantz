@@ -1,3 +1,8 @@
+export const getDailyPlant = (): string => {
+  const day = Math.floor(Date.now() / 86_400_000);
+  return PLANT_SUGGESTIONS[day % PLANT_SUGGESTIONS.length];
+};
+
 export const RANDOM_PLANTS = [
   "Monstera",
   "Fiddle Leaf Fig",

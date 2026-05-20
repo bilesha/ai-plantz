@@ -154,6 +154,9 @@ export default function Index() {
             <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/history")}>
               <Text style={{ fontSize: 24 }}>📜</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/screens/settings")}>
+              <Text style={{ fontSize: 24 }}>⚙️</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>

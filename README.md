@@ -1,50 +1,165 @@
-# Welcome to your Expo app 👋
+# ai-plantz
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A cross-platform botanical assistant app built with React Native/Expo. Search for any plant and get AI-generated care tips powered by Google Gemini, with watering reminders, a personal plant collection, and search history.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **AI plant care tips** — search any plant name and receive a summary plus structured watering, light, and fertilizer guidance from Gemini 1.5 Flash
+- **Plant collection** — mark plants as _Own it_, _Want it_, or _Tried it_, add personal notes, and log watering events
+- **Watering reminders** — schedule push notifications at 3, 7, 14, or 30-day intervals (iOS and Android)
+- **Search history** — last 10 searches persisted locally, with favourite toggling
+- **Client-side caching** — plant details and Wikipedia thumbnail images are cached in AsyncStorage to avoid redundant API calls
+- **Auth** — Supabase email/password authentication with session-gated navigation
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+| Layer | Stack |
+|---|---|
+| Frontend | React Native 0.79.6, Expo 53, Expo Router (file-based) |
+| Styling | NativeWind + Tailwind CSS, `StyleSheet.create()` with theme factory |
+| Backend | Express 5.1, TypeScript, ts-node |
+| AI | Google Gemini 1.5 Flash via `@google/generative-ai` |
+| Auth & DB | Supabase |
+| Persistence | AsyncStorage (client-side only) |
 
-   ```bash
-   npx expo start
-   ```
+## Prerequisites
 
-In the output, you'll find options to open the app in a
+- Node.js 18+
+- An [Expo Go](https://expo.dev/go) app on your device, or a configured Android/iOS emulator
+- A [Google Gemini API key](https://aistudio.google.com/app/apikey)
+- A [Supabase](https://supabase.com) project
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Getting Started
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 1. Clone and install
 
 ```bash
-npm run reset-project
+git clone <repo-url>
+cd ai-plantz
+npm install
+cd backend && npm install && cd ..
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Configure environment variables
 
-## Learn more
+**Frontend** — create `.env` at the project root:
 
-To learn more about developing your project with Expo, look at the following resources:
+```env
+EXPO_PUBLIC_API_URL=http://localhost:5000
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+**Backend** — create `backend/.env`:
 
-## Join the community
+```env
+GEMINI_API_KEY=your_gemini_api_key
+PORT=5000
+ALLOWED_ORIGIN=http://localhost:8081
+```
 
-Join our community of developers creating universal apps.
+### 3. Start the backend
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+cd backend
+npm run dev
+```
+
+The server starts on `http://localhost:5000`. Verify it with `GET /health`.
+
+### 4. Start the frontend
+
+```bash
+npm start          # Expo dev server — scan QR code with Expo Go, or press a/i/w
+npm run android    # Android emulator
+npm run ios        # iOS simulator
+npm run web        # Browser
+```
+
+## Project Structure
+
+```
+ai-plantz/
+├── app/
+│   ├── _layout.tsx          # Root layout, notification channel setup
+│   ├── index.tsx            # Home / search screen
+│   └── screens/
+│       ├── PlantDetailsAiGenerated.tsx   # AI tips, reminders, collection
+│       ├── history.tsx      # Search history
+│       ├── collection.tsx   # Personal plant collection
+│       ├── settings.tsx
+│       ├── auth.tsx         # Login / sign-up
+│       └── username.tsx     # Username setup
+├── backend/
+│   └── src/index.ts         # Express server — /health, /api/plant-tips
+├── components/              # Shared UI components (SkeletonLoader, etc.)
+├── constants/               # theme.ts, plants.ts (suggestions & random picks)
+├── logic/                   # Pure business logic (no UI imports)
+│   ├── cacheLogic.ts
+│   ├── historyLogic.ts
+│   ├── reminderLogic.ts
+│   ├── collectionLogic.ts
+│   └── wateringLogic.ts
+├── utilities/               # API/network helpers
+│   ├── fetchPlantTips.ts
+│   ├── fetchPlantImage.ts
+│   └── storage.ts
+├── types.ts                 # Shared TypeScript types
+└── __tests__/               # Jest test suite
+```
+
+## Backend API
+
+### `GET /health`
+
+Returns `{ "status": "ok" }`. Used by load balancers and uptime monitors.
+
+### `POST /api/plant-tips`
+
+Rate-limited to 10 requests per IP per minute.
+
+**Request body:**
+```json
+{ "plantName": "Monstera Deliciosa" }
+```
+
+**Success response (200):**
+```json
+{
+  "summary": "A brief, engaging one-sentence care summary.",
+  "details": {
+    "watering": "...",
+    "light": "...",
+    "fertilizer": "..."
+  }
+}
+```
+
+**Error responses:** `400` invalid input · `429` rate limited · `500` AI service error · `502` unparseable AI response
+
+## Running Tests
+
+```bash
+npm test                                          # all tests
+npm test -- --testPathPattern=history            # single file
+```
+
+| Test file | Coverage |
+|---|---|
+| `history.test.ts` | `sortHistoryByDate`, `toggleFavoriteLogic` |
+| `cacheLogic.test.ts` | Plant detail cache, image cache three-state logic |
+| `fetchPlantTips.test.ts` | `getPlantTips` — happy path, server errors, network errors |
+| `reminderLogic.test.ts` | Schedule, cancel, and get watering reminders |
+
+## Docker
+
+Build and run the Expo dev server in a container (uses tunnel mode):
+
+```bash
+docker build -t ai-plantz .
+docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 ai-plantz
+```
+
+## Notes
+
+- Watering reminders are **not supported on web** — the reminder UI is hidden automatically when `Platform.OS === 'web'`.
+- The backend is **stateless** — every cache miss on the client triggers a Gemini API call.
+- Wikipedia thumbnails are fetched client-side and cached with a three-state model: `undefined` = not fetched, `null` = no image available, string = cached URL.

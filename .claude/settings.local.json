@@ -20,7 +20,8 @@
       "Bash(python3 -c ' *)",
       "Bash(python -c ' *)",
       "Bash(Test-Path F:\\\\Code\\\\React\\\\ai-plantz\\\\lib *)",
-      "Bash(npm start *)"
+      "Bash(npm start *)",
+      "PowerShell(Get-ChildItem \"F:\\\\Code\\\\React\\\\ai-plantz\" -Name | Where-Object { $_ -notmatch \"node_modules|\\\\.expo|dist\" })"
     ]
   }
 }

@@ -16,7 +16,7 @@ if (!process.env.GEMINI_API_KEY) {
 const app = express();
 
 // 7. Restrict CORS to the known frontend origin in production.
-app.use(cors({ origin: process.env.ALLOWED_ORIGIN || "http://localhost:8081" }));
+app.use(cors());
 app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 5000;

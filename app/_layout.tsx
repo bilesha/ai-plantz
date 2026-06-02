@@ -1,10 +1,12 @@
-import { Stack } from "expo-router";
+import { type Session } from "@supabase/supabase-js";
+import { Stack, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
+import { supabase } from "../lib/supabase";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -41,6 +43,11 @@ if (Platform.OS !== 'web') {
 export default function RootLayout() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
+  const router = useRouter();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
+  // undefined = still loading, null = no session, Session = logged in
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -50,8 +57,31 @@ export default function RootLayout() {
         sound: 'default',
       });
     }
-    SplashScreen.hideAsync();
   }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Wait until the navigator is mounted and session is resolved before redirecting.
+    if (!navigationState?.key || session === undefined) return;
+
+    SplashScreen.hideAsync();
+
+    const onAuthScreen = segments[0] === 'screens' && segments[1] === 'auth';
+
+    if (!session && !onAuthScreen) {
+      router.replace('/screens/auth');
+    } else if (session && onAuthScreen) {
+      router.replace('/');
+    }
+  }, [session, segments, navigationState?.key]);
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>

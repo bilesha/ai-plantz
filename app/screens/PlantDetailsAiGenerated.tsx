@@ -124,10 +124,11 @@ export default function PlantDetailsAiGenerated() {
     } catch {}
   };
 
-  const handleLogWatering = async () => {
+  const handleLogWatering = () => {
     if (!safePlantName) return;
-    await logWatering(safePlantName);
-    setWateringLog(await getWateringLog(safePlantName));
+    const now = Date.now();
+    setWateringLog(prev => [now, ...prev]);
+    logWatering(safePlantName);
   };
 
   const handleShare = async () => {

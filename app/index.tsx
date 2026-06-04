@@ -16,6 +16,7 @@ import PlantCareTips from "../components/PlantCareTips";
 import { getDailyPlant, PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
+import { getHistory, savePlant, deleteHistoryItem, clearHistory } from "../utilities/storage";
 import { removeHistoryItem } from "../logic/historyLogic";
 import { PlantEntry } from "../types";
 
@@ -66,11 +67,11 @@ export default function Index() {
 
   useEffect(() => {
     (async () => {
-      const [saved, seen] = await Promise.all([
-        AsyncStorage.getItem("plantHistory"),
+      const [entries, seen] = await Promise.all([
+        getHistory(),
         AsyncStorage.getItem("seen_welcome"),
       ]);
-      if (saved) setHistory(JSON.parse(saved));
+      setHistory(entries);
       setTourStep(seen ? null : 0);
     })();
   }, []);
@@ -111,13 +112,8 @@ export default function Index() {
         lastViewed: Date.now(),
       };
 
-      const updatedHistory = [
-        newEntry,
-        ...history.filter(p => p.name.toLowerCase() !== target.toLowerCase()),
-      ].slice(0, 10);
-
-      setHistory(updatedHistory);
-      await AsyncStorage.setItem("plantHistory", JSON.stringify(updatedHistory));
+      setHistory(prev => [newEntry, ...prev.filter(p => p.name.toLowerCase() !== target.toLowerCase())].slice(0, 10));
+      savePlant(newEntry);
 
     } catch (err: any) {
       setSummary("");
@@ -140,10 +136,9 @@ export default function Index() {
     handleGetTips(name);
   };
 
-  const handleRemoveItem = async (name: string) => {
-    const updated = removeHistoryItem(history, name);
-    setHistory(updated);
-    await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
+  const handleRemoveItem = (name: string) => {
+    setHistory(prev => removeHistoryItem(prev, name));
+    deleteHistoryItem(name);
   };
 
   const handleClearHistory = () => {
@@ -155,9 +150,9 @@ export default function Index() {
         {
           text: 'Clear',
           style: 'destructive',
-          onPress: async () => {
+          onPress: () => {
             setHistory([]);
-            await AsyncStorage.removeItem("plantHistory");
+            clearHistory();
           },
         },
       ]

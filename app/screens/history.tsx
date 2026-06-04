@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -6,6 +5,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
 import type { PlantEntry } from "../../types";
 import { toggleFavoriteLogic, sortHistoryByDate } from "../../logic/historyLogic";
+import { getHistory, deleteHistoryItem, setFavorite } from "../../utilities/storage";
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -18,8 +18,7 @@ export default function HistoryScreen() {
 
   const loadHistory = async () => {
     try {
-      const stored = await AsyncStorage.getItem("plantHistory");
-      setHistory(stored ? JSON.parse(stored) : []);
+      setHistory(await getHistory());
     } catch {
       setHistory([]);
     } finally {
@@ -29,25 +28,18 @@ export default function HistoryScreen() {
 
   useFocusEffect(useCallback(() => { loadHistory(); }, []));
 
-  const toggleFavorite = useCallback(async (plantName: string) => {
+  const toggleFavorite = useCallback((plantName: string) => {
     const updated = toggleFavoriteLogic(history, plantName);
+    const entry = updated.find(p => p.name === plantName);
+    if (!entry) return;
     setHistory(updated);
-    try {
-      await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
-    } catch {
-      setHistory(history);
-    }
+    setFavorite(plantName, entry.isFavorite);
   }, [history]);
 
-  const deleteItem = useCallback(async (plantName: string) => {
-    const updated = history.filter(p => p.name !== plantName);
-    setHistory(updated);
-    try {
-      await AsyncStorage.setItem("plantHistory", JSON.stringify(updated));
-    } catch {
-      setHistory(history);
-    }
-  }, [history]);
+  const deleteItem = useCallback((plantName: string) => {
+    setHistory(prev => prev.filter(p => p.name !== plantName));
+    deleteHistoryItem(plantName);
+  }, []);
 
   const displayedHistory = useMemo(() => {
     const filtered = showFavoritesOnly

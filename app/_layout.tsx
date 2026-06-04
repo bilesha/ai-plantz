@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 import { supabase } from "../lib/supabase";
+import { migrateLocalCollectionToSupabase } from "../logic/collectionLogic";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -44,7 +45,7 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const router = useRouter();
-  const segments = useSegments();
+  const segments = useSegments() as string[];
   const navigationState = useRootNavigationState();
   // undefined = still loading, null = no session, Session = logged in
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -64,6 +65,7 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (_event === 'SIGNED_IN') migrateLocalCollectionToSupabase();
     });
     return () => subscription.unsubscribe();
   }, []);

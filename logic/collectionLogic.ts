@@ -1,49 +1,226 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { CollectionEntry, OwnershipStatus } from '../types';
+import { supabase } from '../lib/supabase';
+import type { CollectionEntry, OwnershipStatus, PlantDetails } from '../types';
 
-const COLLECTION_KEY = 'plantCollection';
+// Run once in Supabase SQL editor before using this module:
+//
+//   create table plant_collection (
+//     id          uuid primary key default gen_random_uuid(),
+//     user_id     uuid references auth.users(id) on delete cascade not null,
+//     plant_name  text not null,
+//     summary     text not null,
+//     details     jsonb,
+//     added_at    timestamptz not null default now(),
+//     status      text not null check (status in ('own','want','tried')) default 'own',
+//     rating      integer check (rating between 1 and 5),
+//     notes       text,
+//     constraint plant_collection_user_plant_unique unique (user_id, plant_name)
+//   );
+//   alter table plant_collection enable row level security;
+//   create policy "own rows only" on plant_collection for all using (auth.uid() = user_id);
 
-export async function getCollection(): Promise<CollectionEntry[]> {
+const LOCAL_KEY = 'plantCollection';
+const MIGRATION_FLAG = 'collection_migrated_v1';
+
+// ─── DB row type ──────────────────────────────────────────────────────────────
+
+type CollectionRow = {
+  plant_name: string;
+  summary:    string;
+  details:    PlantDetails | null;
+  added_at:   string;
+  status:     OwnershipStatus;
+  rating:     number | null;
+  notes:      string | null;
+};
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+async function getUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id ?? null;
+}
+
+// ─── Row mapping ──────────────────────────────────────────────────────────────
+
+function toRow(userId: string, entry: CollectionEntry): CollectionRow & { user_id: string } {
+  return {
+    user_id:    userId,
+    plant_name: entry.name,
+    summary:    entry.summary,
+    details:    entry.details ?? null,
+    added_at:   new Date(entry.addedAt).toISOString(),
+    status:     entry.status,
+    rating:     entry.rating ?? null,
+    notes:      entry.notes ?? null,
+  };
+}
+
+function fromRow(row: CollectionRow): CollectionEntry {
+  return {
+    name:    row.plant_name,
+    summary: row.summary,
+    details: row.details ?? undefined,
+    addedAt: new Date(row.added_at).getTime(),
+    status:  row.status,
+    rating:  row.rating ?? undefined,
+    notes:   row.notes ?? undefined,
+  };
+}
+
+// ─── Local AsyncStorage (unauthenticated fallback) ────────────────────────────
+
+async function getLocalCollection(): Promise<CollectionEntry[]> {
   try {
-    const stored = await AsyncStorage.getItem(COLLECTION_KEY);
+    const stored = await AsyncStorage.getItem(LOCAL_KEY);
     if (!stored) return [];
     const entries = JSON.parse(stored) as CollectionEntry[];
-    // migrate entries that predate the status field
-    return entries.map(e => ({ status: 'own' as OwnershipStatus, ...e }));
+    return entries.map(e => ({ ...e, status: e.status ?? ('own' as OwnershipStatus) }));
   } catch {
     return [];
   }
 }
 
-export async function getCollectionEntry(name: string): Promise<CollectionEntry | null> {
-  const current = await getCollection();
-  return current.find(p => p.name.toLowerCase() === name.toLowerCase()) ?? null;
+async function saveLocalCollection(entries: CollectionEntry[]): Promise<void> {
+  await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(entries));
 }
 
+// ─── Public API (signatures unchanged — callers need no updates) ──────────────
+
+export async function getCollection(): Promise<CollectionEntry[]> {
+  const userId = await getUserId();
+  if (!userId) return getLocalCollection();
+
+  const { data, error } = await supabase
+    .from('plant_collection')
+    .select('*')
+    .eq('user_id', userId)
+    .order('added_at', { ascending: false });
+
+  if (error) return getLocalCollection();
+  return (data as CollectionRow[]).map(fromRow);
+}
+
+export async function getCollectionEntry(name: string): Promise<CollectionEntry | null> {
+  const userId = await getUserId();
+  if (!userId) {
+    const local = await getLocalCollection();
+    return local.find(p => p.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+
+  const { data, error } = await supabase
+    .from('plant_collection')
+    .select('*')
+    .eq('user_id', userId)
+    .ilike('plant_name', name)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return fromRow(data as CollectionRow);
+}
+
+// Fires Supabase upsert in the background and returns immediately — the caller
+// can update React state optimistically without waiting for the network round-trip.
 export async function addToCollection(entry: CollectionEntry): Promise<void> {
-  const current = await getCollection();
-  const deduped = current.filter(p => p.name.toLowerCase() !== entry.name.toLowerCase());
-  await AsyncStorage.setItem(COLLECTION_KEY, JSON.stringify([entry, ...deduped]));
+  const userId = await getUserId();
+  if (!userId) {
+    const current = await getLocalCollection();
+    const deduped = current.filter(p => p.name.toLowerCase() !== entry.name.toLowerCase());
+    return saveLocalCollection([entry, ...deduped]);
+  }
+
+  supabase
+    .from('plant_collection')
+    .upsert(toRow(userId, entry), { onConflict: 'user_id,plant_name' })
+    .then(({ error }) => {
+      if (error) console.warn('[collection] add failed:', error.message);
+    });
 }
 
 export async function removeFromCollection(name: string): Promise<void> {
-  const current = await getCollection();
-  const updated = current.filter(p => p.name.toLowerCase() !== name.toLowerCase());
-  await AsyncStorage.setItem(COLLECTION_KEY, JSON.stringify(updated));
+  const userId = await getUserId();
+  if (!userId) {
+    const current = await getLocalCollection();
+    return saveLocalCollection(current.filter(p => p.name.toLowerCase() !== name.toLowerCase()));
+  }
+
+  supabase
+    .from('plant_collection')
+    .delete()
+    .eq('user_id', userId)
+    .ilike('plant_name', name)
+    .then(({ error }) => {
+      if (error) console.warn('[collection] remove failed:', error.message);
+    });
 }
 
 export async function updateCollectionEntry(
   name: string,
   patch: Partial<Pick<CollectionEntry, 'status' | 'rating' | 'notes'>>,
 ): Promise<void> {
-  const current = await getCollection();
-  const updated = current.map(p =>
-    p.name.toLowerCase() === name.toLowerCase() ? { ...p, ...patch } : p,
-  );
-  await AsyncStorage.setItem(COLLECTION_KEY, JSON.stringify(updated));
+  const userId = await getUserId();
+  if (!userId) {
+    const current = await getLocalCollection();
+    return saveLocalCollection(
+      current.map(p => p.name.toLowerCase() === name.toLowerCase() ? { ...p, ...patch } : p),
+    );
+  }
+
+  supabase
+    .from('plant_collection')
+    .update({
+      ...(patch.status !== undefined && { status: patch.status }),
+      rating: patch.rating ?? null,
+      notes:  patch.notes  ?? null,
+    })
+    .eq('user_id', userId)
+    .ilike('plant_name', name)
+    .then(({ error }) => {
+      if (error) console.warn('[collection] update failed:', error.message);
+    });
 }
 
 export async function isInCollection(name: string): Promise<boolean> {
-  const current = await getCollection();
-  return current.some(p => p.name.toLowerCase() === name.toLowerCase());
+  return (await getCollectionEntry(name)) !== null;
+}
+
+// ─── One-time migration ───────────────────────────────────────────────────────
+
+// Call once after SIGNED_IN. Copies any existing local collection to Supabase
+// if the user's cloud collection is empty, then clears the local key.
+// The migration flag makes every subsequent call a fast no-op.
+export async function migrateLocalCollectionToSupabase(): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  const alreadyDone = await AsyncStorage.getItem(MIGRATION_FLAG);
+  if (alreadyDone) return;
+
+  const localEntries = await getLocalCollection();
+
+  if (localEntries.length === 0) {
+    await AsyncStorage.setItem(MIGRATION_FLAG, '1');
+    return;
+  }
+
+  // Don't overwrite if the user already has cloud data (e.g. from another device)
+  const { data: existingRows } = await supabase
+    .from('plant_collection')
+    .select('plant_name')
+    .eq('user_id', userId)
+    .limit(1);
+
+  if (existingRows && existingRows.length > 0) {
+    await AsyncStorage.setItem(MIGRATION_FLAG, '1');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('plant_collection')
+    .insert(localEntries.map(e => toRow(userId, e)));
+
+  if (!error) {
+    await AsyncStorage.setItem(MIGRATION_FLAG, '1');
+    await AsyncStorage.removeItem(LOCAL_KEY);
+  }
 }

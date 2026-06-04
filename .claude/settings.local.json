@@ -21,7 +21,9 @@
       "Bash(python -c ' *)",
       "Bash(Test-Path F:\\\\Code\\\\React\\\\ai-plantz\\\\lib *)",
       "Bash(npm start *)",
-      "PowerShell(Get-ChildItem \"F:\\\\Code\\\\React\\\\ai-plantz\" -Name | Where-Object { $_ -notmatch \"node_modules|\\\\.expo|dist\" })"
+      "PowerShell(Get-ChildItem \"F:\\\\Code\\\\React\\\\ai-plantz\" -Name | Where-Object { $_ -notmatch \"node_modules|\\\\.expo|dist\" })",
+      "Bash(Get-Location *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|json\\)$\")"
     ]
   }
 }

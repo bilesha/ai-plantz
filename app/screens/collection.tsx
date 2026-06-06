@@ -137,13 +137,21 @@ export default function CollectionScreen() {
       </View>
 
       {filtered.length === 0 ? (
-        <View style={s.emptyState}>
-          <Text style={s.emptyIcon}>🪴</Text>
-          <Text style={s.emptyText}>{collection.length === 0 ? 'No plants saved yet.' : 'No plants in this list.'}</Text>
-          {collection.length === 0 && (
-            <Text style={s.emptyHint}>Open any plant's detail page and tap "Save to Collection".</Text>
-          )}
-        </View>
+        collection.length === 0 ? (
+          <View style={s.emptyState}>
+            <Text style={s.emptyIcon}>🪴</Text>
+            <Text style={s.emptyTitle}>Your collection is empty</Text>
+            <Text style={s.emptyBody}>Start searching for plants and save them here with your ownership status, ratings, and notes.</Text>
+            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/')}>
+              <Text style={s.emptyBtnText}>Search for plants →</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={s.emptyState}>
+            <Text style={s.emptyIcon}>🔍</Text>
+            <Text style={s.emptyTitle}>No plants in this list.</Text>
+          </View>
+        )
       ) : (
         <FlatList
           data={filtered}
@@ -174,8 +182,10 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   removeIcon:   { fontSize: 14, color: t.textMuted },
   emptyState:   { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   emptyIcon:    { fontSize: 56, marginBottom: 16 },
-  emptyText:    { fontSize: 18, fontWeight: '700', color: t.textTitle, marginBottom: 8, textAlign: 'center' },
-  emptyHint:    { fontSize: 14, color: t.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle:   { fontSize: 20, fontWeight: '800', color: t.textTitle, marginBottom: 10, textAlign: 'center' },
+  emptyBody:    { fontSize: 15, color: t.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  emptyBtn:     { backgroundColor: t.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
+  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   filterRow:         { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
   filterPill:        { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1.5, borderColor: t.border, backgroundColor: t.surface },
   filterPillActive:  { borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },

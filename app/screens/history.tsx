@@ -109,13 +109,22 @@ export default function HistoryScreen() {
       )}
 
       {displayedHistory.length === 0 ? (
-        <View style={s.emptyState}>
-          <Text style={s.emptyText}>
-            {showFavoritesOnly
-              ? "No favourites yet — tap ☆ on any plant."
-              : "No plants searched yet! 🪴"}
-          </Text>
-        </View>
+        showFavoritesOnly ? (
+          <View style={s.emptyState}>
+            <Text style={s.emptyIcon}>⭐</Text>
+            <Text style={s.emptyTitle}>No favourites yet</Text>
+            <Text style={s.emptyBody}>Tap the ☆ on any plant in your history to save it here.</Text>
+          </View>
+        ) : (
+          <View style={s.emptyState}>
+            <Text style={s.emptyIcon}>🔍</Text>
+            <Text style={s.emptyTitle}>No searches yet</Text>
+            <Text style={s.emptyBody}>Plants you search for will appear here. Tap the star to save your favourites.</Text>
+            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/')}>
+              <Text style={s.emptyBtnText}>Search your first plant →</Text>
+            </TouchableOpacity>
+          </View>
+        )
       ) : (
         <FlatList
           data={displayedHistory}
@@ -142,8 +151,12 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   summaryText:      { fontSize: 14, color: t.textSecondary, lineHeight: 20 },
   favIcon:          { fontSize: 22 },
   deleteIcon:       { fontSize: 14, color: t.textMuted },
-  emptyState:       { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText:        { color: t.textMuted, fontSize: 16, textAlign: 'center' },
+  emptyState:   { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  emptyIcon:    { fontSize: 56, marginBottom: 16 },
+  emptyTitle:   { fontSize: 20, fontWeight: '800', color: t.textTitle, marginBottom: 10, textAlign: 'center' },
+  emptyBody:    { fontSize: 15, color: t.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  emptyBtn:     { backgroundColor: t.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
+  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   filterContainer:  { flexDirection: 'row', marginBottom: 20, gap: 10 },
   filterBtn:        { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: t.border },
   filterBtnActive:  { backgroundColor: t.accent },

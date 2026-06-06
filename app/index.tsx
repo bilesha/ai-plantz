@@ -23,19 +23,24 @@ import { PlantEntry } from "../types";
 
 const TOUR_STEPS = [
   {
-    icon: '🔍',
-    title: 'Search any plant',
-    body: 'Type a plant name or tap the Plant of the Day card. LeafyAI fetches AI-powered care tips instantly.',
+    icon: '🌿',
+    title: 'Welcome to LeafyAI',
+    body: 'Search for any plant and get instant AI-powered care tips. Tap the Plant of the Day to get started.',
   },
   {
     icon: '🪴',
-    title: 'Save & set reminders',
-    body: "Open any plant's detail page to add it to your Collection and schedule watering reminders.",
+    title: 'Build your collection',
+    body: 'Save plants to your collection with status (own/want/tried), ratings, and personal notes.',
   },
   {
-    icon: '📜',
-    title: 'History & settings',
-    body: 'Recent searches appear as quick-access chips below the buttons. Use ⚙️ to manage reminders and clear your data.',
+    icon: '👥',
+    title: 'Discover the community',
+    body: "Find other plant lovers, follow them, and see what they're growing in the Discover tab.",
+  },
+  {
+    icon: '⚙️',
+    title: 'Make it yours',
+    body: 'Choose your AI provider, switch between light and dark mode, and set watering reminders in Settings.',
   },
 ];
 
@@ -70,7 +75,7 @@ export default function Index() {
     (async () => {
       const [entries, seen] = await Promise.all([
         getHistory(),
-        AsyncStorage.getItem("seen_welcome"),
+        AsyncStorage.getItem("seen_welcome_v2"),
       ]);
       setHistory(entries);
       setTourStep(seen ? null : 0);
@@ -83,7 +88,7 @@ export default function Index() {
       setTourStep(tourStep + 1);
     } else {
       setTourStep(null);
-      await AsyncStorage.setItem("seen_welcome", "1");
+      await AsyncStorage.setItem("seen_welcome_v2", "1");
     }
   };
 

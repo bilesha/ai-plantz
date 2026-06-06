@@ -4,10 +4,12 @@ import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
-import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 import { supabase } from "../lib/supabase";
 import { migrateLocalCollectionToSupabase } from "../logic/collectionLogic";
+import { ThemeProvider } from "../context/ThemeContext";
+import { useTheme, darkTheme } from "../constants/theme";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -41,9 +43,9 @@ if (Platform.OS !== 'web') {
   });
 }
 
-export default function RootLayout() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+function RootLayoutInner() {
+  const theme = useTheme();
+  const isDark = theme === darkTheme;
   const router = useRouter();
   const segments = useSegments() as string[];
   const navigationState = useRootNavigationState();
@@ -92,9 +94,17 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: isDark ? '#0f172a' : '#f8fafc' },
+          contentStyle: { backgroundColor: theme.background },
         }}
       />
     </ErrorBoundary>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootLayoutInner />
+    </ThemeProvider>
   );
 }

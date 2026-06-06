@@ -1,4 +1,6 @@
+import { useContext } from 'react';
 import { useColorScheme } from 'react-native';
+import { ThemeContext } from '../context/ThemeContext';
 
 export const lightTheme = {
   // Surfaces
@@ -67,6 +69,9 @@ export const darkTheme = {
 export type Theme = typeof lightTheme;
 
 export function useTheme(): Theme {
+  const { preference } = useContext(ThemeContext);
   const scheme = useColorScheme();
+  if (preference === 'light') return lightTheme;
+  if (preference === 'dark') return darkTheme;
   return scheme === 'dark' ? darkTheme : lightTheme;
 }

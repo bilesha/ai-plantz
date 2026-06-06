@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/theme';
+import { useThemePreference, type ThemePreference } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import { cancelWateringReminder, WateringReminder } from '../../logic/reminderLogic';
 
@@ -14,6 +15,12 @@ type ReminderEntry = {
 };
 
 type AiProvider = 'gemini' | 'groq' | 'deepseek' | 'qwen' | 'moonshot';
+
+const APPEARANCE_OPTIONS: { id: ThemePreference; label: string }[] = [
+  { id: 'light', label: '☀️  Light' },
+  { id: 'dark',  label: '🌙  Dark'  },
+  { id: 'auto',  label: '🌓  Auto'  },
+];
 
 const AI_PROVIDERS: { id: AiProvider; label: string }[] = [
   { id: 'gemini',   label: 'Gemini'   },
@@ -27,6 +34,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
+  const { preference: themePreference, setPreference: setThemePreference } = useThemePreference();
   const [reminders, setReminders] = useState<ReminderEntry[]>([]);
   const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
 
@@ -128,6 +136,22 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       )}
       <Text style={s.title}>Settings</Text>
+
+      <Text style={s.sectionLabel}>APPEARANCE</Text>
+      <View style={s.section}>
+        {APPEARANCE_OPTIONS.map(({ id, label }, i) => (
+          <TouchableOpacity
+            key={id}
+            style={[s.row, i < APPEARANCE_OPTIONS.length - 1 && s.rowBorder]}
+            onPress={() => setThemePreference(id)}
+          >
+            <Text style={s.rowTitle}>{label}</Text>
+            <Text style={[s.providerCheck, themePreference === id && s.providerCheckActive]}>
+              {themePreference === id ? '●' : '○'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <Text style={s.sectionLabel}>REMINDERS</Text>
       <View style={s.section}>

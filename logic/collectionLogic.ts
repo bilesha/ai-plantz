@@ -2,6 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from '../types';
 
+// Run once in Supabase SQL editor to create the follows table:
+//
+//   create table follows (
+//     id           uuid primary key default gen_random_uuid(),
+//     follower_id  uuid references auth.users(id) on delete cascade not null,
+//     following_id uuid references auth.users(id) on delete cascade not null,
+//     created_at   timestamptz default now(),
+//     constraint follows_unique unique (follower_id, following_id)
+//   );
+//   alter table follows enable row level security;
+//   create policy "own follows only" on follows for all using (auth.uid() = follower_id);
+//   create policy "public read" on follows for select using (true);
+
 // Run once in Supabase SQL editor before using this module:
 //
 //   create table plant_collection (

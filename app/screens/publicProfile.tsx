@@ -15,6 +15,13 @@ import {
 import { useTheme, type Theme } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { getPublicCollection } from '../../logic/collectionLogic';
+import {
+  followUser,
+  unfollowUser,
+  isFollowing,
+  getFollowerCount,
+  getFollowingCount,
+} from '../../logic/followLogic';
 import type { CollectionEntry, OwnershipStatus } from '../../types';
 
 type ProfileData = {
@@ -54,23 +61,49 @@ export default function PublicProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
 
+  const [following, setFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
   useEffect(() => {
     if (!safeUserId) { setError('No user specified.'); setLoading(false); return; }
 
     (async () => {
       try {
-        const [profileRes, collectionData] = await Promise.all([
+        const sessionPromise = supabase.auth.getSession();
+
+        const [
+          profileRes,
+          collectionData,
+          followerCountVal,
+          followingCountVal,
+          { data: { session } },
+        ] = await Promise.all([
           supabase
             .from('profiles')
             .select('username, bio, avatar_url')
             .eq('id', safeUserId)
             .maybeSingle(),
           getPublicCollection(safeUserId),
+          getFollowerCount(safeUserId),
+          getFollowingCount(safeUserId),
+          sessionPromise,
         ]);
 
         if (profileRes.error) throw profileRes.error;
         setProfile(profileRes.data ?? { username: null, bio: null, avatar_url: null });
         setCollection(collectionData);
+        setFollowerCount(followerCountVal);
+        setFollowingCount(followingCountVal);
+
+        const currentUserId = session?.user?.id ?? null;
+        if (currentUserId === safeUserId) {
+          setIsOwnProfile(true);
+        } else if (currentUserId) {
+          setFollowing(await isFollowing(safeUserId));
+        }
       } catch {
         setError('Could not load this profile.');
       } finally {
@@ -78,6 +111,23 @@ export default function PublicProfileScreen() {
       }
     })();
   }, [safeUserId]);
+
+  const handleFollowToggle = async () => {
+    if (followLoading) return;
+    setFollowLoading(true);
+
+    if (following) {
+      setFollowing(false);
+      setFollowerCount(c => c - 1);
+      await unfollowUser(safeUserId!);
+    } else {
+      setFollowing(true);
+      setFollowerCount(c => c + 1);
+      await followUser(safeUserId!);
+    }
+
+    setFollowLoading(false);
+  };
 
   const displayName = profile?.username ?? 'Plant Lover';
   const showImage = !avatarError && !!profile?.avatar_url?.startsWith('http');
@@ -119,8 +169,38 @@ export default function PublicProfileScreen() {
             <Text style={s.avatarInitials}>{getInitials(displayName)}</Text>
           </View>
         )}
+
         <Text style={s.username}>{displayName}</Text>
+
+        <View style={s.statsRow}>
+          <View style={s.statItem}>
+            <Text style={s.statCount}>{followerCount}</Text>
+            <Text style={s.statLabel}>Followers</Text>
+          </View>
+          <View style={s.statDivider} />
+          <View style={s.statItem}>
+            <Text style={s.statCount}>{followingCount}</Text>
+            <Text style={s.statLabel}>Following</Text>
+          </View>
+        </View>
+
         {profile?.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
+
+        {!isOwnProfile && (
+          <TouchableOpacity
+            style={following ? s.unfollowBtn : s.followBtn}
+            onPress={handleFollowToggle}
+            disabled={followLoading}
+            activeOpacity={0.8}
+          >
+            {followLoading
+              ? <ActivityIndicator color={following ? theme.accent : '#fff'} size="small" />
+              : <Text style={following ? s.unfollowBtnText : s.followBtnText}>
+                  {following ? 'Following' : 'Follow'}
+                </Text>
+            }
+          </TouchableOpacity>
+        )}
       </View>
 
       <Text style={s.sectionLabel}>COLLECTION</Text>
@@ -174,8 +254,20 @@ const styles = (t: Theme) => StyleSheet.create({
   avatar:            { width: 88, height: 88, borderRadius: 44, marginBottom: 12, backgroundColor: t.border },
   avatarPlaceholder: { width: 88, height: 88, borderRadius: 44, backgroundColor: t.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   avatarInitials:    { fontSize: 32, fontWeight: '900', color: '#fff' },
-  username:          { fontSize: 22, fontWeight: '900', color: t.textTitle, marginBottom: 6 },
-  bio:               { fontSize: 14, color: t.textSecondary, textAlign: 'center', lineHeight: 20, maxWidth: 280 },
+  username:          { fontSize: 22, fontWeight: '900', color: t.textTitle, marginBottom: 12 },
+
+  statsRow:          { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  statItem:          { alignItems: 'center', paddingHorizontal: 20 },
+  statCount:         { fontSize: 18, fontWeight: '900', color: t.textPrimary },
+  statLabel:         { fontSize: 12, color: t.textMuted, marginTop: 2 },
+  statDivider:       { width: 1, height: 28, backgroundColor: t.border },
+
+  bio:               { fontSize: 14, color: t.textSecondary, textAlign: 'center', lineHeight: 20, maxWidth: 280, marginBottom: 16 },
+
+  followBtn:         { backgroundColor: t.accent, paddingHorizontal: 32, paddingVertical: 10, borderRadius: 100, minWidth: 120, alignItems: 'center' },
+  followBtnText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
+  unfollowBtn:       { borderWidth: 1.5, borderColor: t.accent, paddingHorizontal: 32, paddingVertical: 10, borderRadius: 100, minWidth: 120, alignItems: 'center' },
+  unfollowBtnText:   { color: t.accent, fontWeight: '700', fontSize: 15 },
 
   sectionLabel:      { fontSize: 12, fontWeight: '800', color: t.textMuted, letterSpacing: 1, marginBottom: 12 },
   groupSection:      { marginBottom: 20 },

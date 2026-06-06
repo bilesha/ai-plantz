@@ -67,10 +67,18 @@ export default function SettingsScreen() {
     setReminders(prev => prev.filter(r => r.plantName !== plantName));
   };
 
+  const performLogout = async () => {
+    if (Platform.OS !== 'web') {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    }
+    await AsyncStorage.clear();
+    await supabase.auth.signOut();
+  };
+
   const handleLogout = () => {
     if (Platform.OS === 'web') {
       if (window.confirm('Are you sure you want to log out?')) {
-        supabase.auth.signOut();
+        performLogout();
       }
       return;
     }
@@ -79,7 +87,7 @@ export default function SettingsScreen() {
       'Are you sure you want to log out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+        { text: 'Log out', style: 'destructive', onPress: () => performLogout() },
       ],
     );
   };

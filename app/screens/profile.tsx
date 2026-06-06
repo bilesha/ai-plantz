@@ -116,9 +116,6 @@ export default function ProfileScreen() {
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <Text style={s.title}>Profile</Text>
-        <TouchableOpacity onPress={() => router.push('/screens/settings')} style={s.settingsBtn}>
-          <Text style={s.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={s.avatarSection}>
@@ -209,10 +206,8 @@ const styles = (t: Theme) => StyleSheet.create({
   content:           { padding: 24, paddingTop: 60, paddingBottom: 80 },
   centered:          { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: t.background, padding: 32 },
 
-  headerRow:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 },
+  headerRow:         { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
   title:             { fontSize: 28, fontWeight: '900', color: t.textTitle },
-  settingsBtn:       { padding: 8 },
-  settingsIcon:      { fontSize: 22 },
 
   avatarSection:     { alignItems: 'center', marginBottom: 32 },
   avatar:            { width: 88, height: 88, borderRadius: 44, marginBottom: 12, backgroundColor: t.border },

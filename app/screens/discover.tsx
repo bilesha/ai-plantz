@@ -46,6 +46,63 @@ async function getTrendingPlants(): Promise<TrendingPlant[]> {
   return data as TrendingPlant[];
 }
 
+type ActivityItem = {
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  plantName: string;
+  addedAt: string;
+};
+
+function formatTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  if (hours < 48) return 'yesterday';
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+async function getFollowingActivity(userId: string): Promise<ActivityItem[]> {
+  const { data: follows } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  const followingIds = (follows ?? []).map((f: { following_id: string }) => f.following_id);
+  if (followingIds.length === 0) return [];
+
+  const { data: entries } = await supabase
+    .from('plant_collection')
+    .select('user_id, plant_name, added_at')
+    .in('user_id', followingIds)
+    .order('added_at', { ascending: false })
+    .limit(10);
+
+  if (!entries || entries.length === 0) return [];
+
+  const uniqueUserIds = [...new Set(entries.map((e: any) => e.user_id as string))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, username, avatar_url')
+    .in('id', uniqueUserIds);
+
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id as string, p]));
+
+  return entries.map((e: any) => {
+    const p = profileMap.get(e.user_id) as { username: string | null; avatar_url: string | null } | undefined;
+    return {
+      userId:    e.user_id,
+      username:  p?.username ?? null,
+      avatarUrl: p?.avatar_url ?? null,
+      plantName: e.plant_name,
+      addedAt:   e.added_at,
+    };
+  });
+}
+
 function getInitials(str: string): string {
   const parts = str.trim().split(/[\s._@]+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -94,17 +151,33 @@ export default function DiscoverScreen() {
 
   const [trending, setTrending] = useState<TrendingPlant[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setTrendingLoading(true);
-      getTrendingPlants().then((data) => {
-        if (active) {
-          setTrending(data);
-          setTrendingLoading(false);
+
+      (async () => {
+        const [trendingData, { data: { session } }] = await Promise.all([
+          getTrendingPlants(),
+          supabase.auth.getSession(),
+        ]);
+        if (!active) return;
+        setTrending(trendingData);
+        setTrendingLoading(false);
+
+        if (session?.user) {
+          setActivityLoading(true);
+          const activityData = await getFollowingActivity(session.user.id);
+          if (active) {
+            setActivity(activityData);
+            setActivityLoading(false);
+          }
         }
-      });
+      })();
+
       return () => { active = false; };
     }, [])
   );
@@ -141,10 +214,6 @@ export default function DiscoverScreen() {
   return (
     <ScreenLayout>
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-        <Text style={s.backText}>← Back</Text>
-      </TouchableOpacity>
-
       <Text style={s.title}>Discover</Text>
 
       {(trendingLoading || trending.length > 0) && (
@@ -174,6 +243,33 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                 ))}
           </ScrollView>
+        </View>
+      )}
+
+      {(activityLoading || activity.length > 0) && (
+        <View style={s.activitySection}>
+          <Text style={s.activityHeading}>FOLLOWING ACTIVITY 🌱</Text>
+          <View style={s.activityCard}>
+            {activityLoading
+              ? [0, 1].map((i) => <View key={i} style={[s.skeletonRow, i === 0 && s.skeletonRowBorder]} />)
+              : activity.map((item, i) => (
+                  <View
+                    key={`${item.userId}_${item.plantName}_${item.addedAt}`}
+                    style={[s.activityRow, i < activity.length - 1 && s.activityRowBorder]}
+                  >
+                    <Avatar url={item.avatarUrl} name={item.username ?? '?'} size={32} />
+                    <View style={s.activityText}>
+                      <Text style={s.activityLine} numberOfLines={2}>
+                        <Text style={s.activityUsername}>{item.username ?? 'Someone'}</Text>
+                        <Text style={s.activityBody}>{' added '}</Text>
+                        <Text style={s.activityPlant}>{item.plantName}</Text>
+                        <Text style={s.activityBody}>{' to their collection'}</Text>
+                      </Text>
+                      <Text style={s.activityTime}>{formatTimeAgo(item.addedAt)}</Text>
+                    </View>
+                  </View>
+                ))}
+          </View>
         </View>
       )}
 
@@ -246,8 +342,6 @@ const styles = (t: Theme) => StyleSheet.create({
   container:    { flex: 1, backgroundColor: t.background },
   content:      { padding: 24, paddingTop: 60, paddingBottom: 80 },
 
-  backBtn:      { marginBottom: 16 },
-  backText:     { color: t.accent, fontWeight: '700', fontSize: 16 },
   title:        { fontSize: 28, fontWeight: '900', color: t.textTitle, marginBottom: 24 },
 
   trendingSection:  { marginBottom: 24 },
@@ -257,6 +351,20 @@ const styles = (t: Theme) => StyleSheet.create({
   pillName:         { fontSize: 14, fontWeight: '700', color: t.textPrimary },
   pillCount:        { fontSize: 12, color: t.accent, marginTop: 2, fontWeight: '600' },
   skeletonPill:     { width: 110, height: 52, borderRadius: 24, backgroundColor: t.border, opacity: 0.6 },
+
+  activitySection:    { marginBottom: 24 },
+  activityHeading:    { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
+  activityCard:       { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  activityRow:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+  activityRowBorder:  { borderBottomWidth: 1, borderBottomColor: t.border },
+  activityText:       { flex: 1 },
+  activityLine:       { fontSize: 14, color: t.textSecondary, lineHeight: 19 },
+  activityUsername:   { fontWeight: '700', color: t.textPrimary },
+  activityBody:       { fontWeight: '400' },
+  activityPlant:      { fontWeight: '700', color: t.accent },
+  activityTime:       { fontSize: 12, color: t.textMuted, marginTop: 2 },
+  skeletonRow:        { height: 52, backgroundColor: t.border, opacity: 0.5 },
+  skeletonRowBorder:  { borderBottomWidth: 1, borderBottomColor: t.background },
 
   inputCard:    { backgroundColor: t.surface, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
   input:        { fontSize: 17, color: t.textPrimary, paddingVertical: 14 },

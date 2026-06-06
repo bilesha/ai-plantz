@@ -119,10 +119,6 @@ export default function CollectionScreen() {
   return (
     <ScreenLayout>
     <View style={s.container}>
-      <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-        <Text style={s.backText}>← Back</Text>
-      </TouchableOpacity>
-
       <Text style={s.title}>My Collection</Text>
       <Text style={s.subtitle}>{filtered.length} {filtered.length === 1 ? 'plant' : 'plants'}</Text>
 
@@ -164,8 +160,6 @@ export default function CollectionScreen() {
 const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   container:    { flex: 1, backgroundColor: t.background, paddingHorizontal: 20, paddingTop: 60 },
   centered:     { justifyContent: 'center', alignItems: 'center' },
-  backBtn:      { marginBottom: 20 },
-  backText:     { color: t.accent, fontWeight: '700', fontSize: 16 },
   title:        { fontSize: 28, fontWeight: '900', color: t.textTitle, marginBottom: 4 },
   subtitle:     { fontSize: 14, color: t.textMuted, marginBottom: 24 },
   listPadding:  { paddingBottom: 80 },

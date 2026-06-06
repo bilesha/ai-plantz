@@ -1,12 +1,21 @@
+// Required Supabase RPC for account deletion:
+//   create or replace function delete_user()
+//   returns void language plpgsql security definer as $$
+//   begin
+//     delete from auth.users where id = auth.uid();
+//   end;
+//   $$;
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/theme';
 import { useThemePreference, type ThemePreference } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
+import { getCollection } from '../../logic/collectionLogic';
 import { cancelWateringReminder, WateringReminder } from '../../logic/reminderLogic';
 
 type ReminderEntry = {
@@ -21,6 +30,18 @@ const APPEARANCE_OPTIONS: { id: ThemePreference; label: string }[] = [
   { id: 'dark',  label: '🌙  Dark'  },
   { id: 'auto',  label: '🌓  Auto'  },
 ];
+
+function getInitials(str: string): string {
+  const parts = str.trim().split(/[\s._@]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return str.slice(0, 2).toUpperCase();
+}
+
+function csvField(val: string | number | null | undefined): string {
+  if (val == null) return '';
+  const s = String(val);
+  return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 const AI_PROVIDERS: { id: AiProvider; label: string }[] = [
   { id: 'gemini',   label: 'Gemini'   },
@@ -37,6 +58,12 @@ export default function SettingsScreen() {
   const { preference: themePreference, setPreference: setThemePreference } = useThemePreference();
   const [reminders, setReminders] = useState<ReminderEntry[]>([]);
   const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+  const [cacheCount, setCacheCount] = useState(0);
+  const [dataMsg, setDataMsg] = useState<string | null>(null);
 
   const loadReminders = async () => {
     try {
@@ -60,6 +87,29 @@ export default function SettingsScreen() {
     if (AI_PROVIDERS.some(p => p.id === stored)) setAiProvider(stored as AiProvider);
   };
 
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setProfileEmail(user.email ?? '');
+      const { data } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+      setProfileUsername(data?.username ?? null);
+      setProfileAvatarUrl(data?.avatar_url ?? null);
+      setAvatarError(false);
+    } catch {}
+  };
+
+  const loadCacheCount = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      setCacheCount(keys.filter(k => k.startsWith('cache_') || k.startsWith('image_')).length);
+    } catch {}
+  };
+
   const handleSelectProvider = async (provider: AiProvider) => {
     setAiProvider(provider);
     await AsyncStorage.setItem('ai_provider', provider);
@@ -68,7 +118,81 @@ export default function SettingsScreen() {
   useFocusEffect(useCallback(() => {
     loadReminders();
     loadAiProvider();
+    loadProfile();
+    loadCacheCount();
   }, []));
+
+  useEffect(() => {
+    if (!dataMsg) return;
+    const t = setTimeout(() => setDataMsg(null), 3000);
+    return () => clearTimeout(t);
+  }, [dataMsg]);
+
+  const handleClearCache = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const cacheKeys = keys.filter(k => k.startsWith('cache_') || k.startsWith('image_'));
+      await AsyncStorage.multiRemove(cacheKeys);
+      setCacheCount(0);
+      setDataMsg('Cache cleared ✓');
+    } catch {
+      setDataMsg('Failed to clear cache');
+    }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      const collection = await getCollection();
+      const header = 'Plant Name,Status,Rating,Notes,Added Date';
+      const rows = collection.map(e =>
+        [
+          csvField(e.name),
+          csvField(e.status),
+          csvField(e.rating),
+          csvField(e.notes),
+          csvField(new Date(e.addedAt).toLocaleDateString()),
+        ].join(',')
+      );
+      const csv = [header, ...rows].join('\n');
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'plant-collection.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        setDataMsg('Collection exported ✓');
+      } else {
+        await Share.share({ title: 'Plant Collection', message: csv });
+        setDataMsg('Collection exported ✓');
+      }
+    } catch {
+      setDataMsg('Export failed');
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    const doDelete = async () => {
+      await supabase.rpc('delete_user');
+      await performLogout();
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('This will permanently delete your account and all data. This cannot be undone.')) {
+        doDelete();
+      }
+      return;
+    }
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete Account', style: 'destructive', onPress: () => doDelete() },
+      ],
+    );
+  };
 
   const handleCancelReminder = async (plantName: string) => {
     await cancelWateringReminder(plantName);
@@ -137,6 +261,29 @@ export default function SettingsScreen() {
       )}
       <Text style={s.title}>Settings</Text>
 
+      <TouchableOpacity style={s.profileCard} onPress={() => router.push('/screens/editProfile')} activeOpacity={0.8}>
+        {!avatarError && profileAvatarUrl?.startsWith('http') ? (
+          <Image
+            source={{ uri: profileAvatarUrl }}
+            style={s.profileAvatar}
+            onError={() => setAvatarError(true)}
+          />
+        ) : (
+          <View style={s.profileAvatarPlaceholder}>
+            <Text style={s.profileAvatarInitials}>
+              {getInitials(profileUsername || profileEmail || '?')}
+            </Text>
+          </View>
+        )}
+        <View style={s.profileCardText}>
+          <Text style={s.profileName} numberOfLines={1}>
+            {profileUsername || 'Plant Lover'}
+          </Text>
+          <Text style={s.profileEmail} numberOfLines={1}>{profileEmail}</Text>
+        </View>
+        <Text style={s.chevron}>›</Text>
+      </TouchableOpacity>
+
       <Text style={s.sectionLabel}>APPEARANCE</Text>
       <View style={s.section}>
         {APPEARANCE_OPTIONS.map(({ id, label }, i) => (
@@ -197,13 +344,33 @@ export default function SettingsScreen() {
           <Text style={s.rowTitle}>Edit Profile</Text>
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.dangerRow} onPress={handleLogout}>
+        <TouchableOpacity style={[s.dangerRow, s.rowBorder]} onPress={handleLogout}>
           <Text style={s.dangerText}>Log out</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.dangerRow} onPress={handleDeleteAccount}>
+          <Text style={s.dangerText}>Delete Account</Text>
         </TouchableOpacity>
       </View>
 
       <Text style={s.sectionLabel}>DATA</Text>
+      {dataMsg && (
+        <View style={s.dataMsgBanner}>
+          <Text style={s.dataMsgText}>{dataMsg}</Text>
+        </View>
+      )}
       <View style={s.section}>
+        <TouchableOpacity style={[s.row, s.rowBorder]} onPress={handleClearCache}>
+          <View style={s.rowInfo}>
+            <Text style={s.rowTitle}>Clear Cache</Text>
+            {cacheCount > 0 && (
+              <Text style={s.rowSub}>{cacheCount} cached {cacheCount === 1 ? 'entry' : 'entries'}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.row, s.rowBorder]} onPress={handleExportCsv}>
+          <Text style={s.rowTitle}>Export Collection</Text>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.dangerRow} onPress={handleClearAllData}>
           <Text style={s.dangerText}>Clear all data</Text>
         </TouchableOpacity>
@@ -246,4 +413,15 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   aboutApp:     { fontSize: 18, fontWeight: '900', color: t.textTitle },
   aboutVersion: { fontSize: 14, color: t.textMuted },
   aboutTagline: { fontSize: 14, color: t.textSecondary, paddingHorizontal: 18, paddingBottom: 16 },
+  // profile card
+  profileCard:             { flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface, borderRadius: 20, padding: 16, marginBottom: 28, gap: 14, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
+  profileAvatar:           { width: 52, height: 52, borderRadius: 26, backgroundColor: t.border },
+  profileAvatarPlaceholder:{ width: 52, height: 52, borderRadius: 26, backgroundColor: t.accent, justifyContent: 'center', alignItems: 'center' },
+  profileAvatarInitials:   { fontSize: 18, fontWeight: '900', color: '#fff' },
+  profileCardText:         { flex: 1 },
+  profileName:             { fontSize: 16, fontWeight: '700', color: t.textPrimary },
+  profileEmail:            { fontSize: 13, color: t.textMuted, marginTop: 2 },
+  // data message banner
+  dataMsgBanner: { backgroundColor: t.surfaceGreenSubtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 10, borderWidth: 1, borderColor: t.accentMid },
+  dataMsgText:   { color: t.accentDark, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
 });

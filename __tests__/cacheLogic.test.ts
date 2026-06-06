@@ -27,44 +27,40 @@ const MONSTERA: PlantDetails = { watering: 'Weekly', light: 'Bright indirect', f
 
 describe('getPlantDetailsFromCache', () => {
   test('returns null when nothing has been cached for that plant', async () => {
-    // The storage is empty (cleared above). getItem returns null for a missing
-    // key, and the function should pass that null straight through to the caller
-    // so the caller knows there is no cache hit.
-    const result = await getPlantDetailsFromCache('Monstera');
+    const result = await getPlantDetailsFromCache('Monstera', 'gemini');
     expect(result).toBeNull();
   });
 
   test('returns the parsed object after a value has been saved', async () => {
-    // First seed the cache manually via AsyncStorage so this test is isolated
-    // from savePlantDetailsToCache (we are testing the reader, not the writer).
-    // JSON.stringify mirrors what the real code stores.
-    await AsyncStorage.setItem('cache_Monstera', JSON.stringify(MONSTERA));
+    await AsyncStorage.setItem('cache_Monstera_gemini', JSON.stringify(MONSTERA));
 
-    const result = await getPlantDetailsFromCache('Monstera');
+    const result = await getPlantDetailsFromCache('Monstera', 'gemini');
 
-    // The function must deserialise the stored string back into an object.
-    // toEqual does a deep value comparison.
     expect(result).toEqual(MONSTERA);
   });
 
-  test('uses the key cache_<plantName> — not just the plant name', async () => {
-    // This guards against a regression where the prefix is dropped.
-    // We write to the bare key 'Monstera' and confirm the function does NOT
-    // return it — because it should be looking for 'cache_Monstera'.
+  test('uses the key cache_<plantName>_<provider> — not just the plant name', async () => {
+    // Writing to a bare key must not be returned by the cache reader.
     await AsyncStorage.setItem('Monstera', JSON.stringify(MONSTERA));
 
-    const result = await getPlantDetailsFromCache('Monstera');
+    const result = await getPlantDetailsFromCache('Monstera', 'gemini');
+
+    expect(result).toBeNull();
+  });
+
+  test('is isolated per provider — groq cache does not satisfy a gemini read', async () => {
+    await AsyncStorage.setItem('cache_Monstera_groq', JSON.stringify(MONSTERA));
+
+    const result = await getPlantDetailsFromCache('Monstera', 'gemini');
 
     expect(result).toBeNull();
   });
 
   test('handles a plant name with spaces correctly', async () => {
-    // Plant names from the UI can contain spaces ("Snake Plant").
-    // The key becomes 'cache_Snake Plant' — confirm the round-trip works.
     const data: PlantDetails = { watering: 'Monthly', light: 'Low', fertilizer: 'None' };
-    await AsyncStorage.setItem('cache_Snake Plant', JSON.stringify(data));
+    await AsyncStorage.setItem('cache_Snake Plant_gemini', JSON.stringify(data));
 
-    const result = await getPlantDetailsFromCache('Snake Plant');
+    const result = await getPlantDetailsFromCache('Snake Plant', 'gemini');
 
     expect(result).toEqual(data);
   });
@@ -72,51 +68,53 @@ describe('getPlantDetailsFromCache', () => {
 
 describe('savePlantDetailsToCache', () => {
   test('stores the data so a subsequent get returns it', async () => {
-    // The most important integration check: save then read, confirm the data
-    // survives the round-trip through JSON serialisation and deserialisation.
-    await savePlantDetailsToCache('Cactus', MONSTERA);
-    const result = await getPlantDetailsFromCache('Cactus');
+    await savePlantDetailsToCache('Cactus', 'gemini', MONSTERA);
+    const result = await getPlantDetailsFromCache('Cactus', 'gemini');
 
     expect(result).toEqual(MONSTERA);
   });
 
-  test('overwrites a previously cached value for the same plant', async () => {
-    // The cache should be a simple last-write-wins store. If the AI returns
-    // updated data for a plant we already cached, the new data replaces the old.
+  test('overwrites a previously cached value for the same plant and provider', async () => {
     const original: PlantDetails = { watering: 'Daily', light: 'Full sun', fertilizer: 'Monthly' };
     const updated: PlantDetails  = { watering: 'Weekly', light: 'Shade', fertilizer: 'Never' };
 
-    await savePlantDetailsToCache('Fern', original);
-    await savePlantDetailsToCache('Fern', updated);
+    await savePlantDetailsToCache('Fern', 'gemini', original);
+    await savePlantDetailsToCache('Fern', 'gemini', updated);
 
-    const result = await getPlantDetailsFromCache('Fern');
+    const result = await getPlantDetailsFromCache('Fern', 'gemini');
     expect(result).toEqual(updated);
   });
 
   test('caches each plant under its own independent key', async () => {
-    // Saving data for "Cactus" must not affect the cache for "Fern".
-    // This would break if the key ignored the plant name (e.g. always 'cache_').
     const cactusData: PlantDetails = { watering: 'Monthly', light: 'Full sun', fertilizer: 'Rarely' };
     const fernData: PlantDetails   = { watering: 'Daily',   light: 'Shade',    fertilizer: 'Monthly' };
 
-    await savePlantDetailsToCache('Cactus', cactusData);
-    await savePlantDetailsToCache('Fern', fernData);
+    await savePlantDetailsToCache('Cactus', 'gemini', cactusData);
+    await savePlantDetailsToCache('Fern', 'gemini', fernData);
 
-    const cactusTips = await getPlantDetailsFromCache('Cactus');
-    const fernTips   = await getPlantDetailsFromCache('Fern');
+    const cactusTips = await getPlantDetailsFromCache('Cactus', 'gemini');
+    const fernTips   = await getPlantDetailsFromCache('Fern', 'gemini');
 
-    // ! asserts the result is non-null — we just saved these so we know they exist
     expect(cactusTips!.watering).toBe('Monthly');
     expect(fernTips!.watering).toBe('Daily');
   });
 
+  test('different providers produce independent cache entries for the same plant', async () => {
+    const geminiData: PlantDetails = { watering: 'Weekly', light: 'Indirect', fertilizer: 'Monthly' };
+    const groqData: PlantDetails   = { watering: 'Daily',  light: 'Full sun', fertilizer: 'Never' };
+
+    await savePlantDetailsToCache('Monstera', 'gemini', geminiData);
+    await savePlantDetailsToCache('Monstera', 'groq', groqData);
+
+    expect(await getPlantDetailsFromCache('Monstera', 'gemini')).toEqual(geminiData);
+    expect(await getPlantDetailsFromCache('Monstera', 'groq')).toEqual(groqData);
+  });
+
   test('all three fields survive the JSON round-trip intact', async () => {
-    // Confirms that every field of PlantDetails survives JSON.stringify → JSON.parse
-    // without being dropped, renamed, or coerced to a different type.
     const data: PlantDetails = { watering: 'Low', light: 'Any', fertilizer: 'None' };
 
-    await savePlantDetailsToCache('ZZ Plant', data);
-    const result = await getPlantDetailsFromCache('ZZ Plant');
+    await savePlantDetailsToCache('ZZ Plant', 'gemini', data);
+    const result = await getPlantDetailsFromCache('ZZ Plant', 'gemini');
 
     expect(result!.watering).toBe('Low');
     expect(result!.light).toBe('Any');
@@ -126,8 +124,6 @@ describe('savePlantDetailsToCache', () => {
 
 describe('getPlantImageFromCache', () => {
   test('returns undefined when the key has never been written (not-yet-fetched)', async () => {
-    // undefined means "go fetch from Wikipedia"; null means "fetched, no image found".
-    // These two states must be distinguishable so we never skip a fetch that hasn't happened yet.
     expect(await getPlantImageFromCache('Monstera')).toBeUndefined();
   });
 
@@ -154,8 +150,6 @@ describe('savePlantImageToCache', () => {
   });
 
   test('round-trip: saving null and reading it back returns null (not undefined)', async () => {
-    // After a successful Wikipedia fetch that returned no image, we cache null so we
-    // do not re-fetch on every visit. Reading back must return null, not undefined.
     await savePlantImageToCache('Rare Plant', null);
     expect(await getPlantImageFromCache('Rare Plant')).toBeNull();
   });

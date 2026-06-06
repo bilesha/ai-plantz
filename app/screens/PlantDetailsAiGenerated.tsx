@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -38,7 +39,38 @@ const STATUS_LABELS: Record<OwnershipStatus, string> = {
   tried: 'Tried it',
 };
 
-const CARD_ORDER: (keyof PlantDetails)[] = ['watering', 'light', 'fertilizer'];
+const CARD_ORDER: (keyof PlantDetails)[] = [
+  'watering', 'light', 'fertilizer', 'careLevel', 'toxicity',
+  'funFact', 'seasonalCare', 'compatibility', 'propagation', 'pairingPlants', 'troubleshooting',
+];
+
+const CARD_LABELS: Partial<Record<keyof PlantDetails, string>> = {
+  watering:       'Watering',
+  light:          'Light',
+  fertilizer:     'Fertilizer',
+  careLevel:      'Care Level',
+  funFact:        'Fun Fact',
+  toxicity:       'Toxicity',
+  seasonalCare:   'Seasonal Care',
+  compatibility:  'Compatibility',
+  pairingPlants:  'Pairing Plants',
+  propagation:    'Propagation',
+  troubleshooting:'Troubleshooting',
+};
+
+const CARE_LEVEL_COLORS: Record<string, string> = {
+  easy:   '#16a34a',
+  medium: '#d97706',
+  hard:   '#dc2626',
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  gemini:   'Gemini',
+  groq:     'Groq',
+  deepseek: 'DeepSeek',
+  qwen:     'Qwen',
+  moonshot: 'Moonshot',
+};
 
 export default function PlantDetailsAiGenerated() {
   const { plantName, summary: summaryParam } = useLocalSearchParams();
@@ -61,24 +93,30 @@ export default function PlantDetailsAiGenerated() {
   const [draftRating, setDraftRating] = useState<number | undefined>(undefined);
   const [draftNotes, setDraftNotes] = useState('');
   const [wateringLog, setWateringLog] = useState<number[]>([]);
+  const [aiProvider, setAiProvider] = useState<string>('gemini');
 
   const fetchDetails = async (name: string) => {
     setLoading(true);
     setError(null);
 
+    const provider = (await AsyncStorage.getItem('ai_provider')) ?? 'gemini';
+    setAiProvider(provider);
+
     try {
-      const cachedData = await getPlantDetailsFromCache(name);
+      const cachedData = await getPlantDetailsFromCache(name, provider);
       if (cachedData) {
         setDetails(cachedData);
         return;
       }
 
       const apiData = await getPlantTips(name);
-      await savePlantDetailsToCache(name, apiData.details);
+      await savePlantDetailsToCache(name, provider, apiData.details);
       setDetails(apiData.details);
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (msg.includes('429')) {
+      if (msg.includes('503')) {
+        setError('Selected AI provider is not available. Try another in Settings.');
+      } else if (msg.includes('429')) {
         setError('Too many requests — wait a moment and try again.');
       } else if (msg.includes('502')) {
         setError('The AI service returned an unexpected response. Please try again.');
@@ -281,13 +319,28 @@ export default function PlantDetailsAiGenerated() {
           {CARD_ORDER.map((key, i) => {
             const value = details?.[key];
             if (!value) return null;
+            const color = key === 'careLevel' ? (CARE_LEVEL_COLORS[value] ?? '#888') : undefined;
             return (
               <Animated.View key={key} entering={FadeInDown.delay(i * 100).duration(400)} style={d.card}>
-                <Text style={d.cardLabel}>{key}</Text>
-                <Text style={d.cardValue}>{value}</Text>
+                <Text style={d.cardLabel}>{CARD_LABELS[key] ?? key}</Text>
+                {key === 'careLevel' ? (
+                  <View style={[d.careLevelPill, { borderColor: color }]}>
+                    <Text style={[d.careLevelText, { color }]}>
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={d.cardValue}>
+                    {key === 'toxicity'
+                      ? (/toxic/i.test(value) ? '⚠️  ' : '✅  ') + value
+                      : value}
+                  </Text>
+                )}
               </Animated.View>
             );
           })}
+
+          <Text style={d.providerBadge}>Powered by {PROVIDER_LABELS[aiProvider] ?? aiProvider}</Text>
 
           {!inCollection && !showAddPicker && (
             <TouchableOpacity style={d.collectionBtn} onPress={() => setShowAddPicker(true)}>
@@ -474,6 +527,9 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   card:            { backgroundColor: t.background, padding: 20, borderRadius: 24, marginBottom: 16, borderLeftWidth: 5, borderLeftColor: t.accentMid },
   cardLabel:       { fontSize: 12, fontWeight: '900', color: t.accent, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   cardValue:       { fontSize: 17, color: t.textBody, lineHeight: 26 },
+  careLevelPill:   { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 100, borderWidth: 1.5 },
+  careLevelText:   { fontSize: 14, fontWeight: '700' },
+  providerBadge:   { fontSize: 12, color: t.textMuted, textAlign: 'center', marginBottom: 16 },
   collectionBtn:           { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 12 },
   collectionBtnText:       { color: t.accent, fontWeight: '700', fontSize: 15 },
   collectionBtnSaved:      { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1.5, borderColor: t.accentMid, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 12 },

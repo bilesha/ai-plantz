@@ -74,8 +74,19 @@ const PLANT_TIPS_PROMPT = (plantName: string) => `
   Provide plant care information for a "${plantName}".
   Respond with a JSON object ONLY. Do not include any text, notes, or markdown formatting before or after the JSON.
   The JSON object must have two keys: "summary" and "details".
-  - "summary": A short, engaging, one-sentence summary of care tips.
-  - "details": An object containing specific care instructions for "watering", "light", and "fertilizer".
+  - "summary": A short, engaging, one-sentence summary of the plant.
+  - "details": An object with the following fields:
+    - "watering": Specific watering instructions.
+    - "light": Light requirements.
+    - "fertilizer": Fertilizer recommendations.
+    - "careLevel": Exactly one of: "easy", "medium", or "hard".
+    - "funFact": One interesting or surprising fact about the plant.
+    - "toxicity": Whether it is safe or toxic, e.g. "Safe for pets and children" or "Toxic to cats and dogs".
+    - "seasonalCare": How care changes between seasons.
+    - "compatibility": How suitable this plant is for beginners versus experienced growers.
+    - "pairingPlants": Plants that grow or look well alongside this one.
+    - "propagation": How to propagate the plant.
+    - "troubleshooting": Common problems and how to fix them (e.g. yellow leaves, drooping, root rot).
 
   Example response format:
   {
@@ -83,7 +94,15 @@ const PLANT_TIPS_PROMPT = (plantName: string) => `
     "details": {
       "watering": "Water every 2-8 weeks, allowing the soil to dry out completely between waterings.",
       "light": "Prefers bright, indirect light but can tolerate low light conditions.",
-      "fertilizer": "Does not require much fertilizer, but you can feed it a balanced houseplant fertilizer once or twice during the spring and summer."
+      "fertilizer": "Feed with a balanced houseplant fertilizer once or twice during spring and summer.",
+      "careLevel": "easy",
+      "funFact": "Snake Plants release oxygen at night, making them a popular choice for bedrooms.",
+      "toxicity": "Toxic to cats and dogs if ingested.",
+      "seasonalCare": "Reduce watering significantly in winter; avoid cold drafts below 10°C.",
+      "compatibility": "Ideal for beginners — tolerates neglect, low light, and irregular watering.",
+      "pairingPlants": "Pairs well with Pothos, ZZ Plant, and Peace Lily in low-light arrangements.",
+      "propagation": "Propagate by dividing the root ball or by placing leaf cuttings in water or soil.",
+      "troubleshooting": "Yellow leaves usually mean overwatering. Brown tips indicate low humidity or fluoride in tap water."
     }
   }
 `;

@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export async function getPlantTips(plantName: string) {
-  console.log("API URL:", API_BASE_URL);
   try {
     const aiProvider = (await AsyncStorage.getItem('ai_provider')) ?? 'gemini';
 

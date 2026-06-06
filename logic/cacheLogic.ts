@@ -1,13 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PlantDetails } from "../types";
 
-export const getPlantDetailsFromCache = async (plantName: string): Promise<PlantDetails | null> => {
-  const cached = await AsyncStorage.getItem(`cache_${plantName}`);
+export const getPlantDetailsFromCache = async (plantName: string, provider: string): Promise<PlantDetails | null> => {
+  const cached = await AsyncStorage.getItem(`cache_${plantName}_${provider}`);
   return cached ? JSON.parse(cached) : null;
 };
 
-export const savePlantDetailsToCache = async (plantName: string, data: PlantDetails): Promise<void> => {
-  await AsyncStorage.setItem(`cache_${plantName}`, JSON.stringify(data));
+export const savePlantDetailsToCache = async (plantName: string, provider: string, data: PlantDetails): Promise<void> => {
+  await AsyncStorage.setItem(`cache_${plantName}_${provider}`, JSON.stringify(data));
 };
 
 const NO_IMAGE_SENTINEL = '__no_image__';

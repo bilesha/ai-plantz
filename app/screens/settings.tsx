@@ -103,6 +103,11 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
+      {Platform.OS === 'web' && (
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <Text style={s.backText}>‹ Back</Text>
+        </TouchableOpacity>
+      )}
       <Text style={s.title}>Settings</Text>
 
       <Text style={s.sectionLabel}>REMINDERS</Text>
@@ -187,6 +192,8 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   rowSub:       { fontSize: 13, color: t.textSecondary, marginTop: 2 },
   cancelBtn:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: t.danger },
   cancelText:   { color: t.danger, fontSize: 13, fontWeight: '700' },
+  backBtn:      { alignSelf: 'flex-start', marginBottom: 8 },
+  backText:     { fontSize: 17, color: t.accent, fontWeight: '600' },
   chevron:      { fontSize: 20, color: t.textMuted },
   providerCheck:       { fontSize: 20, color: t.textMuted },
   providerCheckActive: { color: t.accent },

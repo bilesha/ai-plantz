@@ -2,6 +2,14 @@ export type PlantDetails = {
   watering: string;
   light: string;
   fertilizer: string;
+  careLevel?: 'easy' | 'medium' | 'hard';
+  funFact?: string;
+  toxicity?: string;
+  seasonalCare?: string;
+  compatibility?: string;
+  pairingPlants?: string;
+  propagation?: string;
+  troubleshooting?: string;
 };
 
 export type PlantEntry = {

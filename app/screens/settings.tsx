@@ -13,11 +13,22 @@ type ReminderEntry = {
   intervalDays: number;
 };
 
+type AiProvider = 'gemini' | 'groq' | 'deepseek' | 'qwen' | 'moonshot';
+
+const AI_PROVIDERS: { id: AiProvider; label: string }[] = [
+  { id: 'gemini',   label: 'Gemini'   },
+  { id: 'groq',     label: 'Groq'     },
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'qwen',     label: 'Qwen'     },
+  { id: 'moonshot', label: 'Moonshot' },
+];
+
 export default function SettingsScreen() {
   const router = useRouter();
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
   const [reminders, setReminders] = useState<ReminderEntry[]>([]);
+  const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
 
   const loadReminders = async () => {
     try {
@@ -36,7 +47,20 @@ export default function SettingsScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { loadReminders(); }, []));
+  const loadAiProvider = async () => {
+    const stored = await AsyncStorage.getItem('ai_provider');
+    if (AI_PROVIDERS.some(p => p.id === stored)) setAiProvider(stored as AiProvider);
+  };
+
+  const handleSelectProvider = async (provider: AiProvider) => {
+    setAiProvider(provider);
+    await AsyncStorage.setItem('ai_provider', provider);
+  };
+
+  useFocusEffect(useCallback(() => {
+    loadReminders();
+    loadAiProvider();
+  }, []));
 
   const handleCancelReminder = async (plantName: string) => {
     await cancelWateringReminder(plantName);
@@ -100,6 +124,22 @@ export default function SettingsScreen() {
         )}
       </View>
 
+      <Text style={s.sectionLabel}>AI PROVIDER</Text>
+      <View style={s.section}>
+        {AI_PROVIDERS.map(({ id, label }, i) => (
+          <TouchableOpacity
+            key={id}
+            style={[s.row, i < AI_PROVIDERS.length - 1 && s.rowBorder]}
+            onPress={() => handleSelectProvider(id)}
+          >
+            <Text style={s.rowTitle}>{label}</Text>
+            <Text style={[s.providerCheck, aiProvider === id && s.providerCheckActive]}>
+              {aiProvider === id ? '●' : '○'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <Text style={s.sectionLabel}>ACCOUNT</Text>
       <View style={s.section}>
         <TouchableOpacity
@@ -148,6 +188,8 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   cancelBtn:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: t.danger },
   cancelText:   { color: t.danger, fontSize: 13, fontWeight: '700' },
   chevron:      { fontSize: 20, color: t.textMuted },
+  providerCheck:       { fontSize: 20, color: t.textMuted },
+  providerCheckActive: { color: t.accent },
   dangerRow:    { paddingHorizontal: 18, paddingVertical: 16 },
   dangerText:   { color: t.danger, fontWeight: '700', fontSize: 16 },
   aboutRow:     { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4 },

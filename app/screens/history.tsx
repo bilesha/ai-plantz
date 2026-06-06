@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
+import ScreenLayout from "../../components/ScreenLayout";
 import type { PlantEntry } from "../../types";
 import { toggleFavoriteLogic, sortHistoryByDate } from "../../logic/historyLogic";
 import { getHistory, deleteHistoryItem, setFavorite } from "../../utilities/storage";
@@ -77,13 +78,16 @@ export default function HistoryScreen() {
 
   if (isLoading) {
     return (
-      <View style={[s.container, s.centered]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
+      <ScreenLayout>
+        <View style={[s.container, s.centered]}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </ScreenLayout>
     );
   }
 
   return (
+    <ScreenLayout>
     <View style={s.container}>
       <Text style={s.title}>Search History</Text>
 
@@ -121,6 +125,7 @@ export default function HistoryScreen() {
         />
       )}
     </View>
+    </ScreenLayout>
   );
 }
 
@@ -128,7 +133,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   container:        { flex: 1, backgroundColor: t.background, paddingHorizontal: 20, paddingTop: 60 },
   centered:         { justifyContent: 'center', alignItems: 'center' },
   title:            { fontSize: 28, fontWeight: "900", color: t.textTitle, marginBottom: 20 },
-  listPadding:      { paddingBottom: 40 },
+  listPadding:      { paddingBottom: 80 },
   card:             { backgroundColor: t.surface, borderRadius: 20, marginBottom: 12, flexDirection: "row", alignItems: "center", elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   cardContentWrapper: { flex: 1, padding: 16 },
   iconButton:       { padding: 14, justifyContent: 'center', alignItems: 'center' },

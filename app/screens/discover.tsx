@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme, type Theme } from '../../constants/theme';
+import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
 
 type ProfileResult = {
@@ -99,6 +100,7 @@ export default function DiscoverScreen() {
   }, [query]);
 
   return (
+    <ScreenLayout>
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
         <Text style={s.backText}>← Back</Text>
@@ -167,12 +169,13 @@ export default function DiscoverScreen() {
         </View>
       )}
     </ScrollView>
+    </ScreenLayout>
   );
 }
 
 const styles = (t: Theme) => StyleSheet.create({
   container:    { flex: 1, backgroundColor: t.background },
-  content:      { padding: 24, paddingTop: 60, paddingBottom: 48 },
+  content:      { padding: 24, paddingTop: 60, paddingBottom: 80 },
 
   backBtn:      { marginBottom: 16 },
   backText:     { color: t.accent, fontWeight: '700', fontSize: 16 },

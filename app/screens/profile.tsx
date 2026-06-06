@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme, type Theme } from '../../constants/theme';
+import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
 
 // Run once in Supabase SQL editor:
@@ -118,13 +119,16 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={s.centered}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
+      <ScreenLayout>
+        <View style={s.centered}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </ScreenLayout>
     );
   }
 
   return (
+    <ScreenLayout>
     <KeyboardAvoidingView
       style={s.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -227,13 +231,14 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
+    </ScreenLayout>
   );
 }
 
 const styles = (t: Theme) => StyleSheet.create({
   flex:              { flex: 1, backgroundColor: t.background },
   container:         { flex: 1 },
-  content:           { padding: 24, paddingTop: 60, paddingBottom: 48 },
+  content:           { padding: 24, paddingTop: 60, paddingBottom: 80 },
   centered:          { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: t.background },
 
   backBtn:           { marginBottom: 16 },

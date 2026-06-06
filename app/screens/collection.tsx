@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
+import ScreenLayout from "../../components/ScreenLayout";
 import type { CollectionEntry, OwnershipStatus } from "../../types";
 import { getCollection, removeFromCollection } from "../../logic/collectionLogic";
 
@@ -107,13 +108,16 @@ export default function CollectionScreen() {
 
   if (isLoading) {
     return (
-      <View style={[s.container, s.centered]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
+      <ScreenLayout>
+        <View style={[s.container, s.centered]}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </ScreenLayout>
     );
   }
 
   return (
+    <ScreenLayout>
     <View style={s.container}>
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
         <Text style={s.backText}>← Back</Text>
@@ -153,6 +157,7 @@ export default function CollectionScreen() {
         />
       )}
     </View>
+    </ScreenLayout>
   );
 }
 
@@ -163,7 +168,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   backText:     { color: t.accent, fontWeight: '700', fontSize: 16 },
   title:        { fontSize: 28, fontWeight: '900', color: t.textTitle, marginBottom: 4 },
   subtitle:     { fontSize: 14, color: t.textMuted, marginBottom: 24 },
-  listPadding:  { paddingBottom: 40 },
+  listPadding:  { paddingBottom: 80 },
   card:         { backgroundColor: t.surface, borderRadius: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   cardContent:  { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 16 },
   cardLeft:     { marginRight: 14 },

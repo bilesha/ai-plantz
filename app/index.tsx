@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import PlantCareTips from "../components/PlantCareTips";
+import ScreenLayout from "../components/ScreenLayout";
 import { getDailyPlant, PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
@@ -160,28 +161,11 @@ export default function Index() {
   };
 
   return (
+    <ScreenLayout>
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <View style={s.header}>
-        <View style={s.headerRow}>
-          <View>
-            <Text style={s.title}>🌿 LeafyAI</Text>
-            <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
-          </View>
-          <View style={s.headerIcons}>
-            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/screens/collection")}>
-              <Text style={{ fontSize: 24 }}>🪴</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/history")}>
-              <Text style={{ fontSize: 24 }}>📜</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/screens/discover")}>
-              <Text style={{ fontSize: 24 }}>👥</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnHistoryIcon} onPress={() => router.push("/screens/settings")}>
-              <Text style={{ fontSize: 24 }}>⚙️</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <Text style={s.title}>🌿 LeafyAI</Text>
+        <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
       </View>
 
       {tourStep !== null && (
@@ -307,14 +291,14 @@ export default function Index() {
         </TouchableOpacity>
       )}
     </ScrollView>
+    </ScreenLayout>
   );
 }
 
 const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   container:        { flex: 1, backgroundColor: t.background },
-  content:          { padding: 24, paddingTop: 60, flexGrow: 1 },
+  content:          { padding: 24, paddingTop: 60, paddingBottom: 80, flexGrow: 1 },
   header:           { marginBottom: 32 },
-  headerRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title:            { fontSize: 32, fontWeight: '900', color: t.textTitle },
   subtitle:         { fontSize: 16, color: t.textSecondary },
   welcomeCard:      { backgroundColor: t.surfaceGreen, borderWidth: 1, borderColor: t.borderGreen, borderRadius: 20, padding: 20, marginBottom: 20 },
@@ -354,6 +338,4 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   chipX:            { color: t.textMuted, fontSize: 16, lineHeight: 18, fontWeight: '400' },
   btnOutline:       { marginTop: 16, backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accent, padding: 18, borderRadius: 20, alignItems: 'center' },
   btnOutlineText:   { color: t.accentDark, fontWeight: '800', fontSize: 16 },
-  headerIcons:      { flexDirection: 'row', gap: 10 },
-  btnHistoryIcon:   { backgroundColor: t.surface, padding: 12, borderRadius: 18, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
 });

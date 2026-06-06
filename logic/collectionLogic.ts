@@ -184,6 +184,20 @@ export async function isInCollection(name: string): Promise<boolean> {
   return (await getCollectionEntry(name)) !== null;
 }
 
+// Run in Supabase SQL editor to allow unauthenticated reads of other users' collections:
+//   create policy "public read" on plant_collection for select using (true);
+// The existing "own rows only" policy continues to govern INSERT/UPDATE/DELETE.
+export async function getPublicCollection(userId: string): Promise<CollectionEntry[]> {
+  const { data, error } = await supabase
+    .from('plant_collection')
+    .select('*')
+    .eq('user_id', userId)
+    .order('added_at', { ascending: false });
+
+  if (error || !data) return [];
+  return (data as CollectionRow[]).map(fromRow);
+}
+
 // ─── One-time migration ───────────────────────────────────────────────────────
 
 // Call once after SIGNED_IN. Copies any existing local collection to Supabase

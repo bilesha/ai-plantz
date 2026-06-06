@@ -9,6 +9,11 @@ jest.mock('expo/virtual/env', () => ({
   env: { EXPO_PUBLIC_API_URL: 'http://localhost:5000' },
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPlantTips } from '../utilities/fetchPlantTips';
 
 // Replace the global fetch with a Jest mock function before any test runs.
@@ -32,10 +37,11 @@ function makeFakeResponse(body: unknown, status = 200) {
   };
 }
 
-// Wipe the mock's call history and return value before each test so tests
-// can't accidentally share state (same reason we clear AsyncStorage in cacheLogic).
-beforeEach(() => {
+// Wipe the mock's call history and AsyncStorage before each test so tests
+// can't accidentally share state.
+beforeEach(async () => {
   mockFetch.mockReset();
+  await AsyncStorage.clear();
 });
 
 const PLANT_NAME = 'Monstera';
@@ -59,7 +65,7 @@ describe('getPlantTips — happy path', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plantName: PLANT_NAME }),
+        body: JSON.stringify({ plantName: PLANT_NAME, aiProvider: 'gemini' }),
       })
     );
   });
@@ -84,6 +90,7 @@ describe('getPlantTips — happy path', () => {
 
     const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(sentBody.plantName).toBe('Snake Plant');
+    expect(sentBody.aiProvider).toBe('gemini');
   });
 });
 

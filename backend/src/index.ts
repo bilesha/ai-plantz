@@ -1,8 +1,8 @@
-import express from "express";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import cors from "cors";
 import dotenv from "dotenv";
+import express from "express";
 import rateLimit from "express-rate-limit";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
@@ -22,7 +22,7 @@ app.use(express.json());
 const PORT = Number(process.env.PORT) || 5000;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 // 1. Rate limit: 10 requests per IP per minute to protect against Gemini bill abuse.
 const plantTipsLimiter = rateLimit({

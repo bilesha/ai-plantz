@@ -3,6 +3,7 @@
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export async function getPlantTips(plantName: string) {
+  console.log("API URL:", API_BASE_URL);
   try {
     const response = await fetch(`${API_BASE_URL}/api/plant-tips`, {
       method: "POST",

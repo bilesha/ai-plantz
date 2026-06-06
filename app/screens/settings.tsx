@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
 import { cancelWateringReminder, WateringReminder } from '../../logic/reminderLogic';
 
 type ReminderEntry = {
@@ -13,6 +14,7 @@ type ReminderEntry = {
 };
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
   const [reminders, setReminders] = useState<ReminderEntry[]>([]);
@@ -39,6 +41,17 @@ export default function SettingsScreen() {
   const handleCancelReminder = async (plantName: string) => {
     await cancelWateringReminder(plantName);
     setReminders(prev => prev.filter(r => r.plantName !== plantName));
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      ],
+    );
   };
 
   const handleClearAllData = () => {
@@ -87,6 +100,20 @@ export default function SettingsScreen() {
         )}
       </View>
 
+      <Text style={s.sectionLabel}>ACCOUNT</Text>
+      <View style={s.section}>
+        <TouchableOpacity
+          style={[s.row, s.rowBorder]}
+          onPress={() => router.push('/screens/profile')}
+        >
+          <Text style={s.rowTitle}>Edit Profile</Text>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.dangerRow} onPress={handleLogout}>
+          <Text style={s.dangerText}>Log out</Text>
+        </TouchableOpacity>
+      </View>
+
       <Text style={s.sectionLabel}>DATA</Text>
       <View style={s.section}>
         <TouchableOpacity style={s.dangerRow} onPress={handleClearAllData}>
@@ -120,6 +147,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   rowSub:       { fontSize: 13, color: t.textSecondary, marginTop: 2 },
   cancelBtn:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: t.danger },
   cancelText:   { color: t.danger, fontSize: 13, fontWeight: '700' },
+  chevron:      { fontSize: 20, color: t.textMuted },
   dangerRow:    { paddingHorizontal: 18, paddingVertical: 16 },
   dangerText:   { color: t.danger, fontWeight: '700', fontSize: 16 },
   aboutRow:     { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4 },

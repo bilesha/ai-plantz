@@ -132,22 +132,26 @@ export async function getCollectionEntry(name: string): Promise<CollectionEntry 
   return fromRow(data as CollectionRow);
 }
 
-// Fires Supabase upsert in the background and returns immediately — the caller
-// can update React state optimistically without waiting for the network round-trip.
-export async function addToCollection(entry: CollectionEntry): Promise<void> {
+export async function addToCollection(entry: CollectionEntry): Promise<{ success: boolean; error?: string }> {
   const userId = await getUserId();
   if (!userId) {
     const current = await getLocalCollection();
     const deduped = current.filter(p => p.name.toLowerCase() !== entry.name.toLowerCase());
-    return saveLocalCollection([entry, ...deduped]);
+    await saveLocalCollection([entry, ...deduped]);
+    return { success: true };
   }
 
-  supabase
+  console.log('[collection] entry:', JSON.stringify(entry));
+  console.log('[collection] userId:', userId);
+  const { error } = await supabase
     .from('plant_collection')
-    .upsert(toRow(userId, entry), { onConflict: 'user_id,plant_name' })
-    .then(({ error }) => {
-      if (error) console.warn('[collection] add failed:', error.message);
-    });
+    .upsert(toRow(userId, entry), { onConflict: 'user_id,plant_name' });
+
+  if (error) {
+    console.error('[collection] add failed:', error.message, error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }
 
 export async function removeFromCollection(name: string): Promise<void> {

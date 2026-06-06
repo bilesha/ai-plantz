@@ -94,6 +94,7 @@ export default function PlantDetailsAiGenerated() {
   const [draftNotes, setDraftNotes] = useState('');
   const [wateringLog, setWateringLog] = useState<number[]>([]);
   const [aiProvider, setAiProvider] = useState<string>('gemini');
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const fetchDetails = async (name: string) => {
     setLoading(true);
@@ -192,9 +193,14 @@ export default function PlantDetailsAiGenerated() {
   const handleSaveToCollection = async (status: OwnershipStatus) => {
     if (!safePlantName) return;
     const entry: CollectionEntry = { name: safePlantName, summary: routeSummary, details: details ?? undefined, addedAt: Date.now(), status };
-    await addToCollection(entry);
-    setCollectionEntry(entry);
-    setShowAddPicker(false);
+    const result = await addToCollection(entry);
+    if (result.success) {
+      setCollectionEntry(entry);
+      setShowAddPicker(false);
+      setSaveMessage({ type: 'success', text: '🪴 Plant added to collection!' });
+    } else {
+      setSaveMessage({ type: 'error', text: `Failed: ${result.error ?? 'Unknown error'}` });
+    }
   };
 
   const handleRemoveFromCollection = async () => {
@@ -263,6 +269,12 @@ export default function PlantDetailsAiGenerated() {
       loadWateringLog(safePlantName);
     }
   }, [safePlantName]);
+
+  useEffect(() => {
+    if (!saveMessage) return;
+    const t = setTimeout(() => setSaveMessage(null), 4000);
+    return () => clearTimeout(t);
+  }, [saveMessage]);
 
   const inCollection = collectionEntry !== null;
 
@@ -341,6 +353,14 @@ export default function PlantDetailsAiGenerated() {
           })}
 
           <Text style={d.providerBadge}>Powered by {PROVIDER_LABELS[aiProvider] ?? aiProvider}</Text>
+
+          {saveMessage && (
+            <View style={saveMessage.type === 'success' ? d.saveBannerSuccess : d.saveBannerError}>
+              <Text style={saveMessage.type === 'success' ? d.saveBannerSuccessText : d.saveBannerErrorText}>
+                {saveMessage.text}
+              </Text>
+            </View>
+          )}
 
           {!inCollection && !showAddPicker && (
             <TouchableOpacity style={d.collectionBtn} onPress={() => setShowAddPicker(true)}>
@@ -587,4 +607,9 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   clearRatingText:  { fontSize: 12, color: t.textMuted },
   notesInput:       { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, borderRadius: 12, padding: 12, fontSize: 15, color: t.textPrimary, minHeight: 80, marginBottom: 16 },
   removeLinkText:   { color: t.danger, fontSize: 13, fontWeight: '600' as const, textAlign: 'center' as const, paddingVertical: 4 },
+  // save feedback banner
+  saveBannerSuccess:     { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accentMid, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10 },
+  saveBannerSuccessText: { color: t.accentDark, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
+  saveBannerError:       { backgroundColor: t.errorBg, borderWidth: 1, borderColor: t.errorText, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10 },
+  saveBannerErrorText:   { color: t.errorText, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
 });

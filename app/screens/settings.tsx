@@ -68,6 +68,12 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to log out?')) {
+        supabase.auth.signOut();
+      }
+      return;
+    }
     Alert.alert(
       'Log out',
       'Are you sure you want to log out?',
@@ -78,7 +84,14 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('This will permanently delete your search history, cached tips, favourites, and all watering reminders.')) {
+        await AsyncStorage.clear();
+        setReminders([]);
+      }
+      return;
+    }
     Alert.alert(
       'Clear all data',
       'This will permanently delete your search history, cached tips, favourites, and all watering reminders.',
@@ -88,9 +101,7 @@ export default function SettingsScreen() {
           text: 'Clear everything',
           style: 'destructive',
           onPress: async () => {
-            if (Platform.OS !== 'web') {
-              await Notifications.cancelAllScheduledNotificationsAsync();
-            }
+            await Notifications.cancelAllScheduledNotificationsAsync();
             await AsyncStorage.clear();
             setReminders([]);
           },

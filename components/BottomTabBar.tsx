@@ -9,6 +9,7 @@ const TABS = [
   { icon: '🪴', label: 'Collection', route: '/screens/collection', key: 'collection' },
   { icon: '📜', label: 'History',    route: '/screens/history',    key: 'history' },
   { icon: '👤', label: 'Profile',    route: '/screens/profile',    key: 'profile' },
+  { icon: '⚙️', label: 'Settings',   route: '/screens/settings',   key: 'settings' },
 ] as const;
 
 // Bottom safe-area inset: approximated without a native dependency.

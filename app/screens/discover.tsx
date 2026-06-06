@@ -1,8 +1,19 @@
 // Requires the following Supabase RLS policies:
 //   create policy "public read" on profiles for select using (true);
+//
+// Required Supabase RPC function:
+//   create or replace function get_trending_plants(limit_count int default 10)
+//   returns table(plant_name text, collection_count bigint)
+//   language sql security definer as $$
+//     select plant_name, count(*) as collection_count
+//     from plant_collection
+//     group by plant_name
+//     order by collection_count desc
+//     limit limit_count;
+//   $$;
 
-import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -23,6 +34,17 @@ type ProfileResult = {
   bio: string | null;
   avatar_url: string | null;
 };
+
+type TrendingPlant = {
+  plant_name: string;
+  collection_count: number;
+};
+
+async function getTrendingPlants(): Promise<TrendingPlant[]> {
+  const { data, error } = await supabase.rpc('get_trending_plants', { limit_count: 10 });
+  if (error || !data) return [];
+  return data as TrendingPlant[];
+}
 
 function getInitials(str: string): string {
   const parts = str.trim().split(/[\s._@]+/).filter(Boolean);
@@ -70,6 +92,23 @@ export default function DiscoverScreen() {
   const [searched, setSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [trending, setTrending] = useState<TrendingPlant[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setTrendingLoading(true);
+      getTrendingPlants().then((data) => {
+        if (active) {
+          setTrending(data);
+          setTrendingLoading(false);
+        }
+      });
+      return () => { active = false; };
+    }, [])
+  );
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -107,6 +146,36 @@ export default function DiscoverScreen() {
       </TouchableOpacity>
 
       <Text style={s.title}>Discover</Text>
+
+      {(trendingLoading || trending.length > 0) && (
+        <View style={s.trendingSection}>
+          <Text style={s.trendingHeading}>TRENDING PLANTS 🌿</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.trendingScroll}
+          >
+            {trendingLoading
+              ? [0, 1, 2].map((i) => <View key={i} style={s.skeletonPill} />)
+              : trending.map((item) => (
+                  <TouchableOpacity
+                    key={item.plant_name}
+                    style={s.trendingPill}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/screens/PlantDetailsAiGenerated',
+                        params: { plantName: item.plant_name },
+                      })
+                    }
+                    activeOpacity={0.75}
+                  >
+                    <Text style={s.pillName} numberOfLines={1}>{item.plant_name}</Text>
+                    <Text style={s.pillCount}>{item.collection_count} collector{item.collection_count !== 1 ? 's' : ''}</Text>
+                  </TouchableOpacity>
+                ))}
+          </ScrollView>
+        </View>
+      )}
 
       <View style={s.inputCard}>
         <TextInput
@@ -180,6 +249,14 @@ const styles = (t: Theme) => StyleSheet.create({
   backBtn:      { marginBottom: 16 },
   backText:     { color: t.accent, fontWeight: '700', fontSize: 16 },
   title:        { fontSize: 28, fontWeight: '900', color: t.textTitle, marginBottom: 24 },
+
+  trendingSection:  { marginBottom: 24 },
+  trendingHeading:  { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
+  trendingScroll:   { gap: 10, paddingRight: 4 },
+  trendingPill:     { backgroundColor: t.surface, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 3, maxWidth: 180 },
+  pillName:         { fontSize: 14, fontWeight: '700', color: t.textPrimary },
+  pillCount:        { fontSize: 12, color: t.accent, marginTop: 2, fontWeight: '600' },
+  skeletonPill:     { width: 110, height: 52, borderRadius: 24, backgroundColor: t.border, opacity: 0.6 },
 
   inputCard:    { backgroundColor: t.surface, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
   input:        { fontSize: 17, color: t.textPrimary, paddingVertical: 14 },

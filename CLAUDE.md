@@ -42,9 +42,9 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Data flow**: All screens call `utilities/fetchPlantTips.ts` → reads `ai_provider` from AsyncStorage → `POST /api/plant-tips` with `{ plantName, aiProvider }` → chosen provider → `{ summary, details }`. The detail screen (`PlantDetailsAiGenerated.tsx`) checks `cache_${plantName}_${provider}` in AsyncStorage first and only calls the API on a miss. Cache keys are per-provider so switching providers always fetches fresh tips.
 
-**Auth flow**: `app/_layout.tsx` listens to `supabase.auth.onAuthStateChange` and redirects unauthenticated users to `/screens/auth`. On `SIGNED_IN` it also calls `migrateLocalCollectionToSupabase()` to move any pre-login local collection data to the cloud.
+**Auth flow**: `app/_layout.tsx` wraps the app in `ThemeProvider`, then `RootLayoutInner` listens to `supabase.auth.onAuthStateChange` and redirects unauthenticated users to `/screens/auth`. On `SIGNED_IN` it also calls `migrateLocalCollectionToSupabase()` to move any pre-login local collection data to the cloud.
 
-**Navigation**: A `BottomTabBar` component renders 5 tabs (Home, Discover, Collection, History, Profile). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, settings, auth) are NOT wrapped in ScreenLayout and have no tab bar.
+**Navigation**: A `BottomTabBar` component renders 6 tabs (Home, Discover, Collection, History, Profile, Settings). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, auth, username) are NOT wrapped in ScreenLayout and have no tab bar.
 
 ## Key Architectural Decisions
 
@@ -55,10 +55,10 @@ Three layers, each with a distinct purpose:
 | Layer | What lives here |
 |---|---|
 | **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows` |
-| **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome`, `ai_provider` always |
+| **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome_v2`, `ai_provider`, `theme_preference` always |
 | **AsyncStorage migration flags** | `collection_migrated_v1` — prevents re-running the one-time data migration |
 
-**The pattern in all three logic/storage modules**: `getUserId()` checks the local Supabase session (no network call). If authenticated, reads come from Supabase and writes are fire-and-forget (dispatched without `await`) so callers can update UI state optimistically before the network round-trip completes. If unauthenticated, everything falls back to the corresponding AsyncStorage key.
+**The pattern in all three logic/storage modules**: `getUserId()` checks the local Supabase session (no network call). If authenticated, reads come from Supabase. `addToCollection` is awaited and returns `{ success: boolean; error?: string }` — the caller shows a feedback banner on failure. Other write operations (`removeFromCollection`, `updateCollectionEntry`, `logWatering`) remain fire-and-forget. If unauthenticated, everything falls back to AsyncStorage.
 
 ### Supabase tables
 
@@ -77,6 +77,9 @@ Required Supabase policies beyond the defaults:
 -- Allow anyone to read profiles (for discover / public profiles)
 create policy "public read" on profiles for select using (true);
 
+-- Allow anyone to read plant_collection (for public profiles + trending)
+create policy "public read" on plant_collection for select using (true);
+
 -- follows table
 create table follows (
   id uuid primary key default gen_random_uuid(),
@@ -90,6 +93,28 @@ create policy "own follows only" on follows for all using (auth.uid() = follower
 create policy "public read" on follows for select using (true);
 ```
 
+Required Supabase RPC functions:
+```sql
+-- Used by discover.tsx trending section
+create or replace function get_trending_plants(limit_count int default 10)
+returns table(plant_name text, collection_count bigint)
+language sql security definer as $$
+  select plant_name, count(*) as collection_count
+  from plant_collection
+  group by plant_name
+  order by collection_count desc
+  limit limit_count;
+$$;
+
+-- Used by settings.tsx delete account
+create or replace function delete_user()
+returns void language plpgsql security definer as $$
+begin
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+```
+
 ### AsyncStorage keys (always local — never synced to Supabase)
 
 | Key pattern | Value | Purpose |
@@ -97,8 +122,9 @@ create policy "public read" on follows for select using (true);
 | `cache_${plantName}_${provider}` | `PlantDetails` JSON | AI care tips cache, keyed per provider |
 | `image_${plantName}` | URL string or `__no_image__` | Wikipedia thumbnail cache |
 | `reminder_${plantName}` | `{ id, intervalDays }` | Expo Notification ID — device-specific |
-| `seen_welcome` | `"1"` | Onboarding tour dismissed flag |
+| `seen_welcome_v2` | `"1"` | Onboarding tour dismissed flag (v2 = 4-step tour) |
 | `ai_provider` | provider id string | Selected AI provider (default: `"gemini"`) |
+| `theme_preference` | `"light"` \| `"dark"` \| `"auto"` | User's theme preference (default: `"auto"`) |
 
 **Image cache has three states**: `undefined` = not yet fetched, `null` = fetched but no image exists (sentinel to skip re-fetch), URL string = cached hit. This three-way distinction lives in `logic/cacheLogic.ts:getPlantImageFromCache`.
 
@@ -149,9 +175,11 @@ The backend accepts `aiProvider` in the `/api/plant-tips` request body. Valid va
 
 `PlantDetailsAiGenerated.tsx` also reads `ai_provider` from AsyncStorage and passes it to cache read/write calls so each provider's tips are cached independently.
 
-### Theme system (`constants/theme.ts`)
+### Theme system (`constants/theme.ts` + `context/ThemeContext.tsx`)
 
-All screens use `useTheme()` (reads `useColorScheme()`) to get a typed `Theme` token object. The pattern in every screen is:
+Theme preference (light / dark / auto) is stored in `ThemeContext`. The provider lives in `context/ThemeContext.tsx` and loads the saved preference from AsyncStorage (`theme_preference`) on mount. `app/_layout.tsx` wraps the entire app in `ThemeProvider`.
+
+`useTheme()` reads from `ThemeContext`: returns `lightTheme` for `'light'`, `darkTheme` for `'dark'`, or falls back to `useColorScheme()` for `'auto'`. The pattern in every screen is:
 
 ```typescript
 const theme = useTheme();
@@ -160,19 +188,25 @@ const s = useMemo(() => styles(theme), [theme]);
 const styles = (t: Theme) => StyleSheet.create({ ... });
 ```
 
+To read/write the preference directly: `const { preference, setPreference } = useThemePreference()` from `context/ThemeContext.tsx`. Calling `setPreference` updates context state immediately (instant re-render) and persists to AsyncStorage.
+
 ### Styling
 
 Standardised on `StyleSheet.create()` with the theme factory pattern above. `PlantCareTips.tsx` is the only exception — it uses NativeWind `className`. Do not add NativeWind to new files. `SkeletonLoader.tsx` requires `StyleSheet` permanently because `Animated.Value` can only be passed via the `style` prop.
 
 ### Navigation — BottomTabBar
 
-`components/BottomTabBar.tsx` renders a fixed 5-tab bar. Active tab is detected via `useSegments()` from expo-router. Tab screens must be wrapped in `components/ScreenLayout.tsx`; detail/modal screens must NOT be (they have no tab bar).
+`components/BottomTabBar.tsx` renders a fixed 6-tab bar: Home, Discover, Collection, History, Profile, Settings. Active tab is detected via `useSegments()` from expo-router. Tab screens must be wrapped in `components/ScreenLayout.tsx`; detail/modal screens must NOT be (they have no tab bar).
 
-Tab screens (use ScreenLayout): `index.tsx`, `discover.tsx`, `collection.tsx`, `history.tsx`, `profile.tsx`
+Tab screens (use ScreenLayout): `index.tsx`, `discover.tsx`, `collection.tsx`, `history.tsx`, `profile.tsx`, `settings.tsx`
 
-Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `editProfile.tsx`, `settings.tsx`, `auth.tsx`, `username.tsx`
+Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `editProfile.tsx`, `auth.tsx`, `username.tsx`
 
 All tab-screen scroll content should use `paddingBottom: 80` to clear the tab bar.
+
+### Web compatibility
+
+`Alert.alert` does not work on web. Any confirmation dialog must branch on `Platform.OS === 'web'` and use `window.confirm` on web, `Alert.alert` on native. See `settings.tsx` for the established pattern (`handleLogout`, `handleClearAllData`, `handleDeleteAccount`).
 
 ### Backend prompt engineering (`backend/src/index.ts`)
 
@@ -181,6 +215,8 @@ All providers are prompted to return strict JSON with `summary` and `details` ke
 ### Notifications
 
 Android notification channel `watering-reminders` is registered in `app/_layout.tsx`. Watering reminders are not supported on web — `reminderLogic.ts` throws and `PlantDetailsAiGenerated.tsx` hides the reminder UI when `Platform.OS === 'web'`. Reminder options are 3, 7, 14, or 30 days (configurable in the `REMINDER_OPTIONS` constant at the top of `PlantDetailsAiGenerated.tsx`).
+
+The `performLogout()` function in `settings.tsx` cancels all scheduled notifications (native only), clears AsyncStorage, then calls `supabase.auth.signOut()`. The `onAuthStateChange` listener in `_layout.tsx` handles the redirect automatically.
 
 ## Environment Variables
 
@@ -205,13 +241,14 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
 ## File Layout (non-obvious)
 
 - `lib/supabase.ts` — Supabase client (auth storage uses AsyncStorage; imported by logic and screens)
-- `components/BottomTabBar.tsx` — 5-tab navigation bar; uses `useSegments()` for active detection
+- `context/ThemeContext.tsx` — `ThemeProvider`, `useThemePreference()` hook, `ThemePreference` type; persists preference to AsyncStorage under `theme_preference`
+- `components/BottomTabBar.tsx` — 6-tab navigation bar; uses `useSegments()` for active detection
 - `components/ScreenLayout.tsx` — wraps tab screens with BottomTabBar; do NOT use on detail screens
 - `logic/` — pure business logic (no UI imports):
   - `cacheLogic.ts` — AsyncStorage-backed plant details + image cache; all functions take `(plantName, provider)` as args
   - `historyLogic.ts` — pure functions: `sortHistoryByDate`, `toggleFavoriteLogic`, `removeHistoryItem`
   - `reminderLogic.ts` — Expo Notifications scheduling; uses AsyncStorage for notification IDs
-  - `collectionLogic.ts` — Supabase `plant_collection` CRUD; exports `migrateLocalCollectionToSupabase()`, `getPublicCollection(userId)`
+  - `collectionLogic.ts` — Supabase `plant_collection` CRUD; `addToCollection` returns `{ success, error? }`; exports `migrateLocalCollectionToSupabase()`, `getPublicCollection(userId)`
   - `wateringLogic.ts` — Supabase `watering_log` insert/query; `logWatering` is fire-and-forget
   - `followLogic.ts` — Supabase `follows` table CRUD: `followUser`, `unfollowUser`, `isFollowing`, `getFollowerCount`, `getFollowingCount`
 - `utilities/` — API/network helpers:
@@ -221,13 +258,13 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
 - `app/screens/` — all route screens:
   - `auth.tsx` — login / signup
   - `username.tsx` — post-signup username setup (saves to `auth.users` metadata)
-  - `profile.tsx` — **view screen**: shows avatar, username, email, follower/following/plants stats, bio, Edit Profile button, ⚙️ settings shortcut, collection grouped by status; uses ScreenLayout + useFocusEffect to refresh after edit
-  - `editProfile.tsx` — **edit screen**: TextInputs for username/bio/avatar URL, handleSave with validation; detail screen (no ScreenLayout, no tab bar); navigated to from profile.tsx
-  - `history.tsx` — search history with favourites filter
-  - `collection.tsx` — plant collection with status filter (own / want / tried)
-  - `PlantDetailsAiGenerated.tsx` — care tips, watering log, collection management, reminders; reads `ai_provider` from AsyncStorage for per-provider cache and provider badge
-  - `settings.tsx` — AI provider selector (radio buttons, stored in AsyncStorage), active reminders, "Log out" button, "Clear all data"; web-only back button
-  - `discover.tsx` — debounced username search against `profiles` table; navigates to publicProfile
+  - `profile.tsx` — **view screen**: shows avatar, username, email, follower/following/plants stats, bio, Edit Profile button; collection grouped by status; uses ScreenLayout + useFocusEffect to refresh after edit
+  - `editProfile.tsx` — **edit screen**: TextInputs for username/bio/avatar URL, handleSave with validation; detail screen (no ScreenLayout, no tab bar); navigated to from profile.tsx and settings.tsx
+  - `history.tsx` — search history with favourites filter; rich empty states with nav buttons to home
+  - `collection.tsx` — plant collection with status filter (own / want / tried); rich empty state with nav button to home
+  - `PlantDetailsAiGenerated.tsx` — care tips, watering log, collection management, reminders; reads `ai_provider` from AsyncStorage for per-provider cache and provider badge; shows green/red save feedback banner (auto-dismisses after 4 s)
+  - `settings.tsx` — profile quick-access card; APPEARANCE (light/dark/auto theme); REMINDERS; AI PROVIDER; ACCOUNT (Edit Profile, Log out, Delete Account); DATA (Clear Cache, Export Collection CSV, Clear all data); ABOUT; web-only back button
+  - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Following Activity feed (recent collection adds from followed users); debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
   - `publicProfile.tsx` — public view of another user's profile and collection; follow/unfollow button
 - `constants/` — static data and theme: `plants.ts` (PLANT_SUGGESTIONS, RANDOM_PLANTS), `theme.ts`
 - `styles/` — separated StyleSheet files for larger screens

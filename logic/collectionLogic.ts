@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from '../types';
 
@@ -45,6 +47,7 @@ type CollectionRow = {
   status:     OwnershipStatus;
   rating:     number | null;
   notes:      string | null;
+  photo_url:  string | null;
 };
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -66,18 +69,20 @@ function toRow(userId: string, entry: CollectionEntry): CollectionRow & { user_i
     status:     entry.status,
     rating:     entry.rating ?? null,
     notes:      entry.notes ?? null,
+    photo_url:  entry.photo_url ?? null,
   };
 }
 
 function fromRow(row: CollectionRow): CollectionEntry {
   return {
-    name:    row.plant_name,
-    summary: row.summary,
-    details: row.details ?? undefined,
-    addedAt: new Date(row.added_at).getTime(),
-    status:  row.status,
-    rating:  row.rating ?? undefined,
-    notes:   row.notes ?? undefined,
+    name:      row.plant_name,
+    summary:   row.summary,
+    details:   row.details ?? undefined,
+    addedAt:   new Date(row.added_at).getTime(),
+    status:    row.status,
+    rating:    row.rating ?? undefined,
+    notes:     row.notes ?? undefined,
+    photo_url: row.photo_url ?? undefined,
   };
 }
 
@@ -213,6 +218,40 @@ export async function getPublicCollection(userId: string): Promise<CollectionEnt
 
   if (error || !data) return [];
   return (data as CollectionRow[]).map(fromRow);
+}
+
+// ─── Photo upload ─────────────────────────────────────────────────────────────
+
+export async function updatePhotoUrl(plantName: string, photoUrl: string): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  supabase
+    .from('plant_collection')
+    .update({ photo_url: photoUrl })
+    .eq('user_id', userId)
+    .ilike('plant_name', plantName)
+    .then(({ error }) => {
+      if (error) console.warn('[collection] photo_url update failed:', error.message);
+    });
+}
+
+export async function uploadPlantPhoto(plantName: string, uri: string): Promise<string> {
+  const userId = await getUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  const path = `${userId}/${plantName}.jpg`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('plant-photos')
+    .upload(path, decode(base64), { contentType: 'image/jpeg', upsert: true });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from('plant-photos').getPublicUrl(path);
+  await updatePhotoUrl(plantName, data.publicUrl);
+  return data.publicUrl;
 }
 
 // ─── One-time migration ───────────────────────────────────────────────────────

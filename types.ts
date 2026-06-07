@@ -30,4 +30,5 @@ export type CollectionEntry = {
   status: OwnershipStatus;
   rating?: number;
   notes?: string;
+  photo_url?: string;
 };

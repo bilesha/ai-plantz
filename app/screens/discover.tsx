@@ -27,6 +27,8 @@ import {
 import { useTheme, type Theme } from '../../constants/theme';
 import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
+import { getFeed, type FeedItem } from '../../logic/feedLogic';
+import FeedItemRow from '../../components/FeedItem';
 
 type ProfileResult = {
   id: string;
@@ -46,62 +48,6 @@ async function getTrendingPlants(): Promise<TrendingPlant[]> {
   return data as TrendingPlant[];
 }
 
-type ActivityItem = {
-  userId: string;
-  username: string | null;
-  avatarUrl: string | null;
-  plantName: string;
-  addedAt: string;
-};
-
-function formatTimeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  if (hours < 48) return 'yesterday';
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-async function getFollowingActivity(userId: string): Promise<ActivityItem[]> {
-  const { data: follows } = await supabase
-    .from('follows')
-    .select('following_id')
-    .eq('follower_id', userId);
-
-  const followingIds = (follows ?? []).map((f: { following_id: string }) => f.following_id);
-  if (followingIds.length === 0) return [];
-
-  const { data: entries } = await supabase
-    .from('plant_collection')
-    .select('user_id, plant_name, added_at')
-    .in('user_id', followingIds)
-    .order('added_at', { ascending: false })
-    .limit(10);
-
-  if (!entries || entries.length === 0) return [];
-
-  const uniqueUserIds = [...new Set(entries.map((e: any) => e.user_id as string))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, username, avatar_url')
-    .in('id', uniqueUserIds);
-
-  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id as string, p]));
-
-  return entries.map((e: any) => {
-    const p = profileMap.get(e.user_id) as { username: string | null; avatar_url: string | null } | undefined;
-    return {
-      userId:    e.user_id,
-      username:  p?.username ?? null,
-      avatarUrl: p?.avatar_url ?? null,
-      plantName: e.plant_name,
-      addedAt:   e.added_at,
-    };
-  });
-}
 
 function getInitials(str: string): string {
   const parts = str.trim().split(/[\s._@]+/).filter(Boolean);
@@ -151,7 +97,7 @@ export default function DiscoverScreen() {
 
   const [trending, setTrending] = useState<TrendingPlant[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activity, setActivity] = useState<FeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
   useFocusEffect(
@@ -160,21 +106,16 @@ export default function DiscoverScreen() {
       setTrendingLoading(true);
 
       (async () => {
-        const [trendingData, { data: { session } }] = await Promise.all([
-          getTrendingPlants(),
-          supabase.auth.getSession(),
-        ]);
+        const trendingData = await getTrendingPlants();
         if (!active) return;
         setTrending(trendingData);
         setTrendingLoading(false);
 
-        if (session?.user) {
-          setActivityLoading(true);
-          const activityData = await getFollowingActivity(session.user.id);
-          if (active) {
-            setActivity(activityData);
-            setActivityLoading(false);
-          }
+        setActivityLoading(true);
+        const feedData = await getFeed(5);
+        if (active) {
+          setActivity(feedData);
+          setActivityLoading(false);
         }
       })();
 
@@ -253,23 +194,17 @@ export default function DiscoverScreen() {
             {activityLoading
               ? [0, 1].map((i) => <View key={i} style={[s.skeletonRow, i === 0 && s.skeletonRowBorder]} />)
               : activity.map((item, i) => (
-                  <View
-                    key={`${item.userId}_${item.plantName}_${item.addedAt}`}
-                    style={[s.activityRow, i < activity.length - 1 && s.activityRowBorder]}
-                  >
-                    <Avatar url={item.avatarUrl} name={item.username ?? '?'} size={32} />
-                    <View style={s.activityText}>
-                      <Text style={s.activityLine} numberOfLines={2}>
-                        <Text style={s.activityUsername}>{item.username ?? 'Someone'}</Text>
-                        <Text style={s.activityBody}>{' added '}</Text>
-                        <Text style={s.activityPlant}>{item.plantName}</Text>
-                        <Text style={s.activityBody}>{' to their collection'}</Text>
-                      </Text>
-                      <Text style={s.activityTime}>{formatTimeAgo(item.addedAt)}</Text>
-                    </View>
+                  <View key={item.id} style={i < activity.length - 1 ? s.activityRowBorder : undefined}>
+                    <FeedItemRow item={item} />
                   </View>
-                ))}
+                ))
+            }
           </View>
+          {!activityLoading && activity.length > 0 && (
+            <TouchableOpacity style={s.seeAllBtn} onPress={() => router.push('/screens/feed')}>
+              <Text style={s.seeAllText}>See all activity →</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -355,16 +290,11 @@ const styles = (t: Theme) => StyleSheet.create({
   activitySection:    { marginBottom: 24 },
   activityHeading:    { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
   activityCard:       { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
-  activityRow:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
   activityRowBorder:  { borderBottomWidth: 1, borderBottomColor: t.border },
-  activityText:       { flex: 1 },
-  activityLine:       { fontSize: 14, color: t.textSecondary, lineHeight: 19 },
-  activityUsername:   { fontWeight: '700', color: t.textPrimary },
-  activityBody:       { fontWeight: '400' },
-  activityPlant:      { fontWeight: '700', color: t.accent },
-  activityTime:       { fontSize: 12, color: t.textMuted, marginTop: 2 },
   skeletonRow:        { height: 52, backgroundColor: t.border, opacity: 0.5 },
   skeletonRowBorder:  { borderBottomWidth: 1, borderBottomColor: t.background },
+  seeAllBtn:          { marginTop: 10, alignSelf: 'flex-end' },
+  seeAllText:         { fontSize: 13, fontWeight: '700', color: t.accent },
 
   inputCard:    { backgroundColor: t.surface, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
   input:        { fontSize: 17, color: t.textPrimary, paddingVertical: 14 },

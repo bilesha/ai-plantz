@@ -1,16 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import * as Notifications from "expo-notifications";
+import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../constants/theme";
+import { supabase } from "../../lib/supabase";
+import PlantSocialSection from "../../components/PlantSocialSection";
 import { getPlantTips } from "../../utilities/fetchPlantTips";
 import { fetchPlantImage } from "../../utilities/fetchPlantImage";
 import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
-import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry } from "../../logic/collectionLogic";
+import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, uploadPlantPhoto } from "../../logic/collectionLogic";
 import { logWatering, getWateringLog, formatRelativeDate } from "../../logic/wateringLogic";
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from "../../types";
 
@@ -95,6 +98,8 @@ export default function PlantDetailsAiGenerated() {
   const [wateringLog, setWateringLog] = useState<number[]>([]);
   const [aiProvider, setAiProvider] = useState<string>('gemini');
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchDetails = async (name: string) => {
     setLoading(true);
@@ -226,6 +231,30 @@ export default function PlantDetailsAiGenerated() {
     setShowEditSection(true);
   };
 
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow photo library access to add a plant photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'] as any,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setPhotoUploading(true);
+    try {
+      const url = await uploadPlantPhoto(safePlantName!, result.assets[0].uri);
+      setCollectionEntry(prev => prev ? { ...prev, photo_url: url } : null);
+    } catch (e: any) {
+      Alert.alert('Upload failed', e?.message ?? 'Could not upload photo.');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
   const confirmSetReminder = async (days: number) => {
     try {
       await scheduleWateringReminder(safePlantName!, days);
@@ -261,6 +290,9 @@ export default function PlantDetailsAiGenerated() {
   };
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUserId(session?.user?.id ?? null);
+    });
     if (safePlantName) {
       fetchDetails(safePlantName);
       loadImage(safePlantName);
@@ -315,6 +347,21 @@ export default function PlantDetailsAiGenerated() {
 
       <Text style={d.headerTitle}>{safePlantName}</Text>
       <View style={d.divider} />
+
+      {inCollection && (
+        <View style={d.photoSection}>
+          {collectionEntry?.photo_url ? (
+            <Image source={{ uri: collectionEntry.photo_url }} style={d.photoFull} resizeMode="cover" />
+          ) : null}
+          <TouchableOpacity style={d.photoBtn} onPress={handlePickPhoto} disabled={photoUploading}>
+            {photoUploading ? (
+              <ActivityIndicator size="small" color={theme.accent} />
+            ) : (
+              <Text style={d.photoBtnText}>{collectionEntry?.photo_url ? 'Change photo' : '+ Add photo'}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {error ? (
         <View style={d.errorContainer}>
@@ -507,6 +554,16 @@ export default function PlantDetailsAiGenerated() {
             </View>
           )}
 
+          {currentUserId && (
+            <View style={d.socialWrapper}>
+              <PlantSocialSection
+                plantOwnerUserId={currentUserId}
+                plantName={safePlantName}
+                currentUserId={currentUserId}
+              />
+            </View>
+          )}
+
           <View style={d.logSection}>
             <TouchableOpacity style={d.logBtn} onPress={handleLogWatering}>
               <Text style={d.logBtnText}>💧 Log Watering</Text>
@@ -565,6 +622,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   reminderActive:      { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.borderGreen, padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   reminderActiveText:  { color: t.accentDark, fontWeight: '600', fontSize: 14 },
   reminderDismiss:     { color: t.danger, fontSize: 13, fontWeight: '600' },
+  socialWrapper:   { marginTop: 8, marginBottom: 8, backgroundColor: t.background, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: t.border },
   logSection:      { marginTop: 16, paddingBottom: 16 },
   logBtn:          { backgroundColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 16 },
   logBtnText:      { color: '#fff', fontWeight: '700', fontSize: 15 },
@@ -607,6 +665,11 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   clearRatingText:  { fontSize: 12, color: t.textMuted },
   notesInput:       { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, borderRadius: 12, padding: 12, fontSize: 15, color: t.textPrimary, minHeight: 80, marginBottom: 16 },
   removeLinkText:   { color: t.danger, fontSize: 13, fontWeight: '600' as const, textAlign: 'center' as const, paddingVertical: 4 },
+  // photo section
+  photoSection:  { marginBottom: 20 },
+  photoFull:     { width: '100%', height: 220, borderRadius: 16, marginBottom: 10 },
+  photoBtn:      { alignSelf: 'center' as const, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surface, minWidth: 120, alignItems: 'center' as const },
+  photoBtnText:  { color: t.accent, fontWeight: '700' as const, fontSize: 14 },
   // save feedback banner
   saveBannerSuccess:     { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accentMid, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10 },
   saveBannerSuccessText: { color: t.accentDark, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },

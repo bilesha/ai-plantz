@@ -14,6 +14,7 @@ import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
 import { getFollowerCount, getFollowingCount } from '../../logic/followLogic';
 import { getCollection } from '../../logic/collectionLogic';
+import { getUnreadCount } from '../../logic/notificationLogic';
 import type { CollectionEntry, OwnershipStatus } from '../../types';
 
 type ProfileData = {
@@ -53,6 +54,7 @@ export default function ProfileScreen() {
   const [avatarError, setAvatarError] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -63,11 +65,12 @@ export default function ProfileScreen() {
 
       setEmail(user.email ?? '');
 
-      const [profileRes, collectionData, followers, following] = await Promise.all([
+      const [profileRes, collectionData, followers, following, unread] = await Promise.all([
         supabase.from('profiles').select('username, bio, avatar_url').eq('id', user.id).maybeSingle(),
         getCollection(),
         getFollowerCount(user.id),
         getFollowingCount(user.id),
+        getUnreadCount(),
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -75,6 +78,7 @@ export default function ProfileScreen() {
       setCollection(collectionData);
       setFollowerCount(followers);
       setFollowingCount(following);
+      setUnreadCount(unread);
       setAvatarError(false);
     } catch {
       setError('Could not load profile.');
@@ -116,6 +120,17 @@ export default function ProfileScreen() {
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <Text style={s.title}>Profile</Text>
+        <TouchableOpacity
+          style={s.bellBtn}
+          onPress={() => router.push('/screens/notifications')}
+        >
+          <Text style={s.bellIcon}>🔔</Text>
+          {unreadCount > 0 && (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={s.avatarSection}>
@@ -206,8 +221,12 @@ const styles = (t: Theme) => StyleSheet.create({
   content:           { padding: 24, paddingTop: 60, paddingBottom: 80 },
   centered:          { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: t.background, padding: 32 },
 
-  headerRow:         { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
+  headerRow:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 },
   title:             { fontSize: 28, fontWeight: '900', color: t.textTitle },
+  bellBtn:           { padding: 6 },
+  bellIcon:          { fontSize: 22 },
+  badge:             { position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeText:         { color: '#fff', fontSize: 10, fontWeight: '800' },
 
   avatarSection:     { alignItems: 'center', marginBottom: 32 },
   avatar:            { width: 88, height: 88, borderRadius: 44, marginBottom: 12, backgroundColor: t.border },

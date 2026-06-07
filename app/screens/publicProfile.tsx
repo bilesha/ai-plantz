@@ -22,7 +22,10 @@ import {
   getFollowerCount,
   getFollowingCount,
 } from '../../logic/followLogic';
+import { toggleLike } from '../../logic/socialLogic';
 import type { CollectionEntry, OwnershipStatus } from '../../types';
+
+type PlantLikeInfo = { count: number; liked: boolean };
 
 type ProfileData = {
   username: string | null;
@@ -66,6 +69,8 @@ export default function PublicProfileScreen() {
   const [followingCount, setFollowingCount] = useState(0);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [likesMap, setLikesMap] = useState<Record<string, PlantLikeInfo>>({});
 
   useEffect(() => {
     if (!safeUserId) { setError('No user specified.'); setLoading(false); return; }
@@ -98,12 +103,27 @@ export default function PublicProfileScreen() {
         setFollowerCount(followerCountVal);
         setFollowingCount(followingCountVal);
 
-        const currentUserId = session?.user?.id ?? null;
-        if (currentUserId === safeUserId) {
+        const uid = session?.user?.id ?? null;
+        setCurrentUserId(uid);
+        if (uid === safeUserId) {
           setIsOwnProfile(true);
-        } else if (currentUserId) {
+        } else if (uid) {
           setFollowing(await isFollowing(safeUserId));
         }
+
+        // Batch-load likes for all plants in this collection
+        const { data: allLikes } = await supabase
+          .from('plant_likes')
+          .select('plant_name, user_id')
+          .eq('plant_owner_id', safeUserId);
+
+        const map: Record<string, PlantLikeInfo> = {};
+        for (const like of allLikes ?? []) {
+          if (!map[like.plant_name]) map[like.plant_name] = { count: 0, liked: false };
+          map[like.plant_name].count++;
+          if (like.user_id === uid) map[like.plant_name].liked = true;
+        }
+        setLikesMap(map);
       } catch {
         setError('Could not load this profile.');
       } finally {
@@ -127,6 +147,16 @@ export default function PublicProfileScreen() {
     }
 
     setFollowLoading(false);
+  };
+
+  const handleToggleLikePlant = async (plantName: string) => {
+    if (!currentUserId || isOwnProfile) return;
+    // Optimistic update
+    setLikesMap(prev => {
+      const cur = prev[plantName] ?? { count: 0, liked: false };
+      return { ...prev, [plantName]: { count: cur.liked ? cur.count - 1 : cur.count + 1, liked: !cur.liked } };
+    });
+    await toggleLike(safeUserId!, plantName);
   };
 
   const displayName = profile?.username ?? 'Plant Lover';
@@ -219,19 +249,37 @@ export default function PublicProfileScreen() {
                 {label.toUpperCase()} · {group.length}
               </Text>
               <View style={s.card}>
-                {group.map((entry, i) => (
-                  <View
-                    key={entry.name}
-                    style={[s.row, i < group.length - 1 && s.rowBorder]}
-                  >
-                    <Text style={s.plantName}>{entry.name}</Text>
-                    {entry.rating != null && (
-                      <Text style={s.rating}>
-                        {'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}
-                      </Text>
-                    )}
-                  </View>
-                ))}
+                {group.map((entry, i) => {
+                  const likeInfo = likesMap[entry.name] ?? { count: 0, liked: false };
+                  return (
+                    <TouchableOpacity
+                      key={entry.name}
+                      style={[s.row, i < group.length - 1 && s.rowBorder]}
+                      onPress={() => router.push({
+                        pathname: '/screens/publicPlantDetail',
+                        params: { plantOwnerUserId: safeUserId, plantName: entry.name, summary: entry.summary },
+                      })}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={s.plantName}>{entry.name}</Text>
+                      <View style={s.rowRight}>
+                        {entry.rating != null && (
+                          <Text style={s.rating}>
+                            {'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}
+                          </Text>
+                        )}
+                        <TouchableOpacity
+                          style={s.likeInline}
+                          onPress={() => handleToggleLikePlant(entry.name)}
+                          disabled={!currentUserId || isOwnProfile}
+                        >
+                          <Text style={s.likeHeart}>{likeInfo.liked ? '❤️' : '🤍'}</Text>
+                          <Text style={s.likeCountInline}>{likeInfo.count > 0 ? likeInfo.count : ''}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           );
@@ -276,7 +324,11 @@ const styles = (t: Theme) => StyleSheet.create({
   row:               { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14 },
   rowBorder:         { borderBottomWidth: 1, borderBottomColor: t.border },
   plantName:         { fontSize: 15, fontWeight: '700', color: t.textPrimary, flex: 1 },
+  rowRight:          { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rating:            { fontSize: 13, color: t.accent },
+  likeInline:        { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  likeHeart:         { fontSize: 16 },
+  likeCountInline:   { fontSize: 12, color: t.textMuted, minWidth: 12 },
   emptyCard:         { backgroundColor: t.surface, borderRadius: 20, padding: 24, alignItems: 'center' },
   emptyText:         { color: t.textMuted, fontSize: 15 },
   errorText:         { fontSize: 16, color: t.textSecondary, textAlign: 'center', marginBottom: 8 },

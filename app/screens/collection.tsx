@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useTheme } from "../../constants/theme";
 import ScreenLayout from "../../components/ScreenLayout";
@@ -8,6 +8,7 @@ import type { CollectionEntry, OwnershipStatus } from "../../types";
 import { getCollection, removeFromCollection } from "../../logic/collectionLogic";
 
 type FilterStatus = 'all' | OwnershipStatus;
+type SortBy = 'name_asc' | 'name_desc' | 'date_new' | 'date_old' | 'rating_high';
 
 const STATUS_COLORS: Record<OwnershipStatus, string> = {
   own:   '#059669',
@@ -28,6 +29,14 @@ const FILTERS: { key: FilterStatus; label: string }[] = [
   { key: 'tried', label: 'Tried' },
 ];
 
+const SORT_OPTIONS: { key: SortBy; label: string }[] = [
+  { key: 'date_new',    label: 'Newest'    },
+  { key: 'date_old',    label: 'Oldest'    },
+  { key: 'name_asc',    label: 'Name A–Z'  },
+  { key: 'name_desc',   label: 'Name Z–A'  },
+  { key: 'rating_high', label: 'Top Rated' },
+];
+
 export default function CollectionScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -36,6 +45,8 @@ export default function CollectionScreen() {
   const [collection, setCollection] = useState<CollectionEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<SortBy>('date_new');
 
   const loadCollection = async () => {
     try {
@@ -61,10 +72,27 @@ export default function CollectionScreen() {
     }
   }, [collection]);
 
-  const filtered = useMemo(
-    () => filterStatus === 'all' ? collection : collection.filter(p => p.status === filterStatus),
-    [collection, filterStatus],
-  );
+  const filtered = useMemo(() => {
+    let items = filterStatus === 'all' ? collection : collection.filter(p => p.status === filterStatus);
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      items = items.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        (p.notes != null && p.notes.toLowerCase().includes(q))
+      );
+    }
+
+    return [...items].sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc':    return a.name.localeCompare(b.name);
+        case 'name_desc':   return b.name.localeCompare(a.name);
+        case 'date_old':    return a.addedAt - b.addedAt;
+        case 'rating_high': return (b.rating ?? -1) - (a.rating ?? -1);
+        default:            return b.addedAt - a.addedAt; // date_new
+      }
+    });
+  }, [collection, filterStatus, searchQuery, sortBy]);
 
   const renderItem = useCallback(({ item, index }: { item: CollectionEntry; index: number }) => (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
@@ -77,7 +105,11 @@ export default function CollectionScreen() {
           })}
         >
           <View style={s.cardLeft}>
-            <Text style={s.leafIcon}>🪴</Text>
+            {item.photo_url ? (
+              <Image source={{ uri: item.photo_url }} style={s.plantThumb} />
+            ) : (
+              <Text style={s.leafIcon}>🪴</Text>
+            )}
           </View>
           <View style={s.textContainer}>
             <Text style={s.plantName}>{item.name}</Text>
@@ -121,6 +153,30 @@ export default function CollectionScreen() {
     <View style={s.container}>
       <Text style={s.title}>My Collection</Text>
       <Text style={s.subtitle}>{filtered.length} {filtered.length === 1 ? 'plant' : 'plants'}</Text>
+
+      <TextInput
+        style={s.searchInput}
+        placeholder="Search plants or notes..."
+        placeholderTextColor={theme.textMuted}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        clearButtonMode="while-editing"
+        returnKeyType="search"
+      />
+
+      <View style={s.filterRow}>
+        {SORT_OPTIONS.map(o => (
+          <TouchableOpacity
+            key={o.key}
+            style={[s.filterPill, sortBy === o.key && s.filterPillActive]}
+            onPress={() => setSortBy(o.key)}
+          >
+            <Text style={[s.filterPillText, sortBy === o.key && s.filterPillActiveText]}>
+              {o.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <View style={s.filterRow}>
         {FILTERS.map(f => (
@@ -175,6 +231,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   cardContent:  { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 16 },
   cardLeft:     { marginRight: 14 },
   leafIcon:     { fontSize: 28 },
+  plantThumb:   { width: 40, height: 40, borderRadius: 8 },
   textContainer: { flex: 1 },
   plantName:    { fontSize: 18, fontWeight: '700', color: t.textPrimary, marginBottom: 4 },
   summaryText:  { fontSize: 14, color: t.textSecondary, lineHeight: 20 },
@@ -186,7 +243,8 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   emptyBody:    { fontSize: 15, color: t.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   emptyBtn:     { backgroundColor: t.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
   emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  filterRow:         { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
+  searchInput:  { backgroundColor: t.surface, borderRadius: 14, borderWidth: 1.5, borderColor: t.border, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, color: t.textPrimary, marginBottom: 12 },
+  filterRow:         { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
   filterPill:        { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100, borderWidth: 1.5, borderColor: t.border, backgroundColor: t.surface },
   filterPillActive:  { borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },
   filterPillText:    { color: t.textSecondary, fontWeight: '600', fontSize: 13 },

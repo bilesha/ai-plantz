@@ -6,6 +6,7 @@ import { useTheme } from "../../constants/theme";
 import ScreenLayout from "../../components/ScreenLayout";
 import type { CollectionEntry, OwnershipStatus } from "../../types";
 import { getCollection, removeFromCollection } from "../../logic/collectionLogic";
+import { useToast } from "../../context/ToastContext";
 
 type FilterStatus = 'all' | OwnershipStatus;
 type SortBy = 'name_asc' | 'name_desc' | 'date_new' | 'date_old' | 'rating_high';
@@ -41,6 +42,7 @@ export default function CollectionScreen() {
   const router = useRouter();
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
+  const { showToast } = useToast();
 
   const [collection, setCollection] = useState<CollectionEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,10 +69,11 @@ export default function CollectionScreen() {
     setCollection(optimistic);
     try {
       await removeFromCollection(name);
+      showToast('Plant removed', 'success');
     } catch {
       setCollection(prev);
     }
-  }, [collection]);
+  }, [collection, showToast]);
 
   const filtered = useMemo(() => {
     let items = filterStatus === 'all' ? collection : collection.filter(p => p.status === filterStatus);

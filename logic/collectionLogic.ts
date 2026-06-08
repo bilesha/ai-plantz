@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from '../types';
 
@@ -237,21 +238,43 @@ export async function updatePhotoUrl(plantName: string, photoUrl: string): Promi
 }
 
 export async function uploadPlantPhoto(plantName: string, uri: string): Promise<string> {
+  console.log('[uploadPlantPhoto] entry — plantName:', plantName, 'uri:', uri);
   const userId = await getUserId();
   if (!userId) throw new Error('Not authenticated');
 
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  const path = `${userId}/${plantName}.jpg`;
+  try {
+    const path = `${userId}/${plantName}.jpg`;
 
-  const { error: uploadError } = await supabase.storage
-    .from('plant-photos')
-    .upload(path, decode(base64), { contentType: 'image/jpeg', upsert: true });
+    let uploadData: ArrayBuffer;
+    if (Platform.OS === 'web') {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      uploadData = await blob.arrayBuffer();
+    } else {
+      try {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        console.log('[uploadPlantPhoto] base64 read, length:', base64.length);
+        uploadData = decode(base64);
+      } catch (e: any) {
+        throw new Error(`File read failed: ${e.message}`);
+      }
+    }
 
-  if (uploadError) throw uploadError;
+    const uploadResponse = await supabase.storage
+      .from('plant-photos')
+      .upload(path, uploadData, { contentType: 'image/jpeg', upsert: true });
+    console.log('[uploadPlantPhoto] storage upload response:', uploadResponse);
 
-  const { data } = supabase.storage.from('plant-photos').getPublicUrl(path);
-  await updatePhotoUrl(plantName, data.publicUrl);
-  return data.publicUrl;
+    if (uploadResponse.error) throw new Error(`Storage upload failed: ${uploadResponse.error.message}`);
+
+    const { data } = supabase.storage.from('plant-photos').getPublicUrl(path);
+    console.log('[uploadPlantPhoto] public url:', data.publicUrl);
+    await updatePhotoUrl(plantName, data.publicUrl);
+    return data.publicUrl;
+  } catch (e) {
+    console.log('[uploadPlantPhoto] error:', e);
+    throw e;
+  }
 }
 
 // ─── One-time migration ───────────────────────────────────────────────────────

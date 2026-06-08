@@ -14,6 +14,7 @@ import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
 import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, uploadPlantPhoto } from "../../logic/collectionLogic";
+import { useToast } from "../../context/ToastContext";
 import { logWatering, getWateringLog, formatRelativeDate } from "../../logic/wateringLogic";
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from "../../types";
 
@@ -82,6 +83,7 @@ export default function PlantDetailsAiGenerated() {
   const router = useRouter();
   const theme = useTheme();
   const d = useMemo(() => styles(theme), [theme]);
+  const { showToast } = useToast();
 
   const [details, setDetails] = useState<PlantDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,6 @@ export default function PlantDetailsAiGenerated() {
   const [draftNotes, setDraftNotes] = useState('');
   const [wateringLog, setWateringLog] = useState<number[]>([]);
   const [aiProvider, setAiProvider] = useState<string>('gemini');
-  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -202,9 +203,9 @@ export default function PlantDetailsAiGenerated() {
     if (result.success) {
       setCollectionEntry(entry);
       setShowAddPicker(false);
-      setSaveMessage({ type: 'success', text: '🪴 Plant added to collection!' });
+      showToast('Plant added to collection!', 'success');
     } else {
-      setSaveMessage({ type: 'error', text: `Failed: ${result.error ?? 'Unknown error'}` });
+      showToast(`Failed: ${result.error ?? 'Unknown error'}`, 'error');
     }
   };
 
@@ -213,6 +214,7 @@ export default function PlantDetailsAiGenerated() {
     await removeFromCollection(safePlantName);
     setCollectionEntry(null);
     setShowEditSection(false);
+    showToast('Plant removed', 'success');
   };
 
   const handleUpdateCollection = async () => {
@@ -232,10 +234,12 @@ export default function PlantDetailsAiGenerated() {
   };
 
   const handlePickPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Allow photo library access to add a plant photo.');
-      return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Allow photo library access to add a plant photo.');
+        return;
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'] as any,
@@ -243,13 +247,21 @@ export default function PlantDetailsAiGenerated() {
       aspect: [1, 1],
       quality: 0.7,
     });
-    if (result.canceled || !result.assets?.[0]) return;
+    console.log('[handlePickPhoto] launchImageLibraryAsync result:', result);
+    if (result.canceled || !result.assets?.[0]) {
+      console.log('[handlePickPhoto] picker cancelled');
+      return;
+    }
     setPhotoUploading(true);
     try {
+      console.log('[handlePickPhoto] starting upload, uri:', result.assets[0].uri);
       const url = await uploadPlantPhoto(safePlantName!, result.assets[0].uri);
+      console.log('[handlePickPhoto] upload returned url:', url);
       setCollectionEntry(prev => prev ? { ...prev, photo_url: url } : null);
+      showToast('Photo uploaded!', 'success');
     } catch (e: any) {
-      Alert.alert('Upload failed', e?.message ?? 'Could not upload photo.');
+      console.log('[handlePickPhoto] error:', e);
+      showToast('Upload failed', 'error');
     } finally {
       setPhotoUploading(false);
     }
@@ -302,19 +314,13 @@ export default function PlantDetailsAiGenerated() {
     }
   }, [safePlantName]);
 
-  useEffect(() => {
-    if (!saveMessage) return;
-    const t = setTimeout(() => setSaveMessage(null), 4000);
-    return () => clearTimeout(t);
-  }, [saveMessage]);
-
   const inCollection = collectionEntry !== null;
 
   if (!safePlantName) {
     return (
       <View style={d.container}>
         <View style={d.topBar}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
             <Text style={d.backText}>← Back to Search</Text>
           </TouchableOpacity>
         </View>
@@ -329,7 +335,7 @@ export default function PlantDetailsAiGenerated() {
   return (
     <ScrollView style={d.container} contentContainerStyle={d.content}>
       <View style={d.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <Text style={d.backText}>← Back to Search</Text>
         </TouchableOpacity>
         {details && (
@@ -348,6 +354,7 @@ export default function PlantDetailsAiGenerated() {
       <Text style={d.headerTitle}>{safePlantName}</Text>
       <View style={d.divider} />
 
+      
       {inCollection && (
         <View style={d.photoSection}>
           {collectionEntry?.photo_url ? (
@@ -401,13 +408,7 @@ export default function PlantDetailsAiGenerated() {
 
           <Text style={d.providerBadge}>Powered by {PROVIDER_LABELS[aiProvider] ?? aiProvider}</Text>
 
-          {saveMessage && (
-            <View style={saveMessage.type === 'success' ? d.saveBannerSuccess : d.saveBannerError}>
-              <Text style={saveMessage.type === 'success' ? d.saveBannerSuccessText : d.saveBannerErrorText}>
-                {saveMessage.text}
-              </Text>
-            </View>
-          )}
+
 
           {!inCollection && !showAddPicker && (
             <TouchableOpacity style={d.collectionBtn} onPress={() => setShowAddPicker(true)}>
@@ -671,8 +672,4 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   photoBtn:      { alignSelf: 'center' as const, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surface, minWidth: 120, alignItems: 'center' as const },
   photoBtnText:  { color: t.accent, fontWeight: '700' as const, fontSize: 14 },
   // save feedback banner
-  saveBannerSuccess:     { backgroundColor: t.surfaceGreenSubtle, borderWidth: 1, borderColor: t.accentMid, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10 },
-  saveBannerSuccessText: { color: t.accentDark, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
-  saveBannerError:       { backgroundColor: t.errorBg, borderWidth: 1, borderColor: t.errorText, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10 },
-  saveBannerErrorText:   { color: t.errorText, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
 });

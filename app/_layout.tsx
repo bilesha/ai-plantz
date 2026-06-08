@@ -9,6 +9,7 @@ import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 import { supabase } from "../lib/supabase";
 import { migrateLocalCollectionToSupabase } from "../logic/collectionLogic";
 import { ThemeProvider } from "../context/ThemeContext";
+import { ToastProvider } from "../context/ToastContext";
 import { useTheme, darkTheme } from "../constants/theme";
 import "../global.css";
 
@@ -104,7 +105,9 @@ function RootLayoutInner() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <RootLayoutInner />
+      <ToastProvider>
+        <RootLayoutInner />
+      </ToastProvider>
     </ThemeProvider>
   );
 }

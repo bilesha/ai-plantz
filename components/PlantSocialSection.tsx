@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme, type Theme } from '../constants/theme';
+import { useToast } from '../context/ToastContext';
 import {
   getLikes,
   toggleLike,
@@ -36,6 +37,7 @@ type Props = {
 export default function PlantSocialSection({ plantOwnerUserId, plantName, currentUserId }: Props) {
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
+  const { showToast } = useToast();
 
   const [likeCount, setLikeCount]         = useState(0);
   const [hasLiked, setHasLiked]           = useState(false);
@@ -70,6 +72,7 @@ export default function PlantSocialSection({ plantOwnerUserId, plantName, curren
         setHasLiked(confirmed);
         setLikeCount(c => confirmed ? c + 1 : c - 1);
       }
+      if (confirmed) showToast('Liked!', 'success');
     } catch {
       setHasLiked(!optimistic);
       setLikeCount(c => optimistic ? c - 1 : c + 1);
@@ -86,6 +89,7 @@ export default function PlantSocialSection({ plantOwnerUserId, plantName, curren
     if (newComment) {
       setComments(prev => [...prev, newComment]);
       setCommentText('');
+      showToast('Comment added', 'success');
     }
     setSending(false);
   };
@@ -93,6 +97,7 @@ export default function PlantSocialSection({ plantOwnerUserId, plantName, curren
   const handleDelete = async (commentId: string) => {
     setComments(prev => prev.filter(c => c.id !== commentId));
     await deleteComment(commentId);
+    showToast('Comment deleted', 'success');
   };
 
   return (

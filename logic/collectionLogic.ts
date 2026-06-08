@@ -41,14 +41,16 @@ const MIGRATION_FLAG = 'collection_migrated_v1';
 // ─── DB row type ──────────────────────────────────────────────────────────────
 
 type CollectionRow = {
-  plant_name: string;
-  summary:    string;
-  details:    PlantDetails | null;
-  added_at:   string;
-  status:     OwnershipStatus;
-  rating:     number | null;
-  notes:      string | null;
-  photo_url:  string | null;
+  plant_name:             string;
+  summary:                string;
+  details:                PlantDetails | null;
+  added_at:               string;
+  status:                 OwnershipStatus;
+  rating:                 number | null;
+  notes:                  string | null;
+  photo_url:              string | null;
+  watering_interval_days: number | null;
+  next_watering_date:     string | null;
 };
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -62,28 +64,32 @@ async function getUserId(): Promise<string | null> {
 
 function toRow(userId: string, entry: CollectionEntry): CollectionRow & { user_id: string } {
   return {
-    user_id:    userId,
-    plant_name: entry.name,
-    summary:    entry.summary,
-    details:    entry.details ?? null,
-    added_at:   new Date(entry.addedAt).toISOString(),
-    status:     entry.status,
-    rating:     entry.rating ?? null,
-    notes:      entry.notes ?? null,
-    photo_url:  entry.photo_url ?? null,
+    user_id:                userId,
+    plant_name:             entry.name,
+    summary:                entry.summary,
+    details:                entry.details ?? null,
+    added_at:               new Date(entry.addedAt).toISOString(),
+    status:                 entry.status,
+    rating:                 entry.rating ?? null,
+    notes:                  entry.notes ?? null,
+    photo_url:              entry.photo_url ?? null,
+    watering_interval_days: entry.watering_interval_days ?? null,
+    next_watering_date:     entry.next_watering_date ?? null,
   };
 }
 
 function fromRow(row: CollectionRow): CollectionEntry {
   return {
-    name:      row.plant_name,
-    summary:   row.summary,
-    details:   row.details ?? undefined,
-    addedAt:   new Date(row.added_at).getTime(),
-    status:    row.status,
-    rating:    row.rating ?? undefined,
-    notes:     row.notes ?? undefined,
-    photo_url: row.photo_url ?? undefined,
+    name:                   row.plant_name,
+    summary:                row.summary,
+    details:                row.details ?? undefined,
+    addedAt:                new Date(row.added_at).getTime(),
+    status:                 row.status,
+    rating:                 row.rating ?? undefined,
+    notes:                  row.notes ?? undefined,
+    photo_url:              row.photo_url ?? undefined,
+    watering_interval_days: row.watering_interval_days ?? undefined,
+    next_watering_date:     row.next_watering_date ?? undefined,
   };
 }
 

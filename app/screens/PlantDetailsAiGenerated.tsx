@@ -15,7 +15,7 @@ import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCac
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
 import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, uploadPlantPhoto } from "../../logic/collectionLogic";
 import { useToast } from "../../context/ToastContext";
-import { logWatering, getWateringLog, formatRelativeDate } from "../../logic/wateringLogic";
+import WateringSection from "../../components/WateringSection";
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from "../../types";
 
 const REMINDER_OPTIONS = [
@@ -97,7 +97,6 @@ export default function PlantDetailsAiGenerated() {
   const [draftStatus, setDraftStatus] = useState<OwnershipStatus>('own');
   const [draftRating, setDraftRating] = useState<number | undefined>(undefined);
   const [draftNotes, setDraftNotes] = useState('');
-  const [wateringLog, setWateringLog] = useState<number[]>([]);
   const [aiProvider, setAiProvider] = useState<string>('gemini');
   const [photoUploading, setPhotoUploading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -163,18 +162,6 @@ export default function PlantDetailsAiGenerated() {
     } catch {}
   };
 
-  const loadWateringLog = async (name: string) => {
-    try {
-      setWateringLog(await getWateringLog(name));
-    } catch {}
-  };
-
-  const handleLogWatering = () => {
-    if (!safePlantName) return;
-    const now = Date.now();
-    setWateringLog(prev => [now, ...prev]);
-    logWatering(safePlantName);
-  };
 
   const handleShare = async () => {
     if (!details || !safePlantName) return;
@@ -310,7 +297,6 @@ export default function PlantDetailsAiGenerated() {
       loadImage(safePlantName);
       loadReminder(safePlantName);
       loadCollectionEntry(safePlantName);
-      loadWateringLog(safePlantName);
     }
   }, [safePlantName]);
 
@@ -565,26 +551,7 @@ export default function PlantDetailsAiGenerated() {
             </View>
           )}
 
-          <View style={d.logSection}>
-            <TouchableOpacity style={d.logBtn} onPress={handleLogWatering}>
-              <Text style={d.logBtnText}>💧 Log Watering</Text>
-            </TouchableOpacity>
-
-            {wateringLog.length > 0 && (
-              <View style={d.logHistory}>
-                <Text style={d.logHistoryLabel}>WATERING HISTORY</Text>
-                {wateringLog.slice(0, 5).map((ts, i) => (
-                  <View
-                    key={ts}
-                    style={[d.logEntry, i < Math.min(wateringLog.length, 5) - 1 && d.logEntryBorder]}
-                  >
-                    <View style={d.logDot} />
-                    <Text style={d.logEntryDate}>{formatRelativeDate(ts)}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          <WateringSection plantName={safePlantName} isOwner={!!currentUserId} />
         </View>
       )}
     </ScrollView>
@@ -624,16 +591,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   reminderActiveText:  { color: t.accentDark, fontWeight: '600', fontSize: 14 },
   reminderDismiss:     { color: t.danger, fontSize: 13, fontWeight: '600' },
   socialWrapper:   { marginTop: 8, marginBottom: 8, backgroundColor: t.background, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: t.border },
-  logSection:      { marginTop: 16, paddingBottom: 16 },
-  logBtn:          { backgroundColor: t.accent, padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: 16 },
-  logBtnText:      { color: '#fff', fontWeight: '700', fontSize: 15 },
-  logHistory:      { backgroundColor: t.background, borderRadius: 20, padding: 16 },
-  logHistoryLabel: { fontSize: 12, fontWeight: '800', color: t.textMuted, letterSpacing: 1, marginBottom: 12 },
-  logEntry:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  logEntryBorder:  { borderBottomWidth: 1, borderBottomColor: t.border },
-  logDot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: t.accentMid, marginRight: 12 },
-  logEntryDate:    { fontSize: 15, color: t.textBody },
-  errorContainer:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+    errorContainer:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   errorIcon:       { fontSize: 50, marginBottom: 20 },
   errorText:       { fontSize: 16, color: t.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
   retryButton:     { backgroundColor: t.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },

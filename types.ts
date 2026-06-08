@@ -31,4 +31,6 @@ export type CollectionEntry = {
   rating?: number;
   notes?: string;
   photo_url?: string;
+  next_watering_date?: string;
+  watering_interval_days?: number;
 };

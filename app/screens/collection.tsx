@@ -38,6 +38,11 @@ const SORT_OPTIONS: { key: SortBy; label: string }[] = [
   { key: 'rating_high', label: 'Top Rated' },
 ];
 
+function isDueForWatering(item: CollectionEntry): boolean {
+  if (!item.next_watering_date) return false;
+  return new Date(item.next_watering_date) <= new Date();
+}
+
 export default function CollectionScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -131,6 +136,9 @@ export default function CollectionScreen() {
             {item.summary ? (
               <Text numberOfLines={2} style={s.summaryText}>{item.summary}</Text>
             ) : null}
+            {isDueForWatering(item) && (
+              <Text style={s.waterBadge}>💧 Water due</Text>
+            )}
           </View>
         </TouchableOpacity>
 
@@ -255,4 +263,5 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   metaRow:      { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   statusBadge:  { fontSize: 12, fontWeight: '600' },
   ratingText:   { fontSize: 12, color: t.textMuted },
+  waterBadge:   { fontSize: 12, color: '#2563eb', fontWeight: '700', marginTop: 4 },
 });

@@ -6,6 +6,7 @@ import { useTheme } from "../../constants/theme";
 import ScreenLayout from "../../components/ScreenLayout";
 import type { CollectionEntry, OwnershipStatus } from "../../types";
 import { getCollection, removeFromCollection } from "../../logic/collectionLogic";
+import { getRecentHealthLogCounts } from "../../logic/healthLogLogic";
 import { useToast } from "../../context/ToastContext";
 
 type FilterStatus = 'all' | OwnershipStatus;
@@ -50,6 +51,7 @@ export default function CollectionScreen() {
   const { showToast } = useToast();
 
   const [collection, setCollection] = useState<CollectionEntry[]>([]);
+  const [healthLogCounts, setHealthLogCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,6 +61,10 @@ export default function CollectionScreen() {
     try {
       const items = await getCollection();
       setCollection(items);
+      if (items.length > 0) {
+        const counts = await getRecentHealthLogCounts(items.map(i => i.name));
+        setHealthLogCounts(counts);
+      }
     } catch {
       setCollection([]);
     } finally {
@@ -136,8 +142,17 @@ export default function CollectionScreen() {
             {item.summary ? (
               <Text numberOfLines={2} style={s.summaryText}>{item.summary}</Text>
             ) : null}
-            {isDueForWatering(item) && (
-              <Text style={s.waterBadge}>💧 Water due</Text>
+            {(isDueForWatering(item) || (healthLogCounts[item.name] ?? 0) > 0) && (
+              <View style={s.badgeRow}>
+                {isDueForWatering(item) && (
+                  <Text style={s.waterBadge}>💧 Water due</Text>
+                )}
+                {(healthLogCounts[item.name] ?? 0) > 0 && (
+                  <Text style={s.healthBadge}>
+                    📋 {healthLogCounts[item.name]} {healthLogCounts[item.name] === 1 ? 'note' : 'notes'}
+                  </Text>
+                )}
+              </View>
             )}
           </View>
         </TouchableOpacity>
@@ -147,7 +162,7 @@ export default function CollectionScreen() {
         </TouchableOpacity>
       </View>
     </Animated.View>
-  ), [s, router, handleRemove]);
+  ), [s, router, handleRemove, healthLogCounts]);
 
   if (isLoading) {
     return (
@@ -263,5 +278,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   metaRow:      { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   statusBadge:  { fontSize: 12, fontWeight: '600' },
   ratingText:   { fontSize: 12, color: t.textMuted },
-  waterBadge:   { fontSize: 12, color: '#2563eb', fontWeight: '700', marginTop: 4 },
+  badgeRow:     { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
+  waterBadge:   { fontSize: 12, color: '#2563eb', fontWeight: '700' },
+  healthBadge:  { fontSize: 12, color: '#059669', fontWeight: '700' },
 });

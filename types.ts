@@ -22,6 +22,12 @@ export type PlantEntry = {
 
 export type OwnershipStatus = 'own' | 'want' | 'tried';
 
+export type HealthLogEntry = {
+  id: string;
+  note: string;
+  logged_at: string;
+};
+
 export type CollectionEntry = {
   name: string;
   summary: string;

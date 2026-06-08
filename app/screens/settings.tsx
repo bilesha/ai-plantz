@@ -11,12 +11,15 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/theme';
 import { useThemePreference, type ThemePreference } from '../../context/ThemeContext';
+import { useToast } from '../../context/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { getCollection } from '../../logic/collectionLogic';
+import { getAllHealthLogs } from '../../logic/healthLogLogic';
 import { cancelWateringReminder, WateringReminder } from '../../logic/reminderLogic';
+import { getWateringLog } from '../../logic/wateringLogic';
 
 type ReminderEntry = {
   plantName: string;
@@ -64,6 +67,11 @@ export default function SettingsScreen() {
   const [avatarError, setAvatarError] = useState(false);
   const [cacheCount, setCacheCount] = useState(0);
   const [dataMsg, setDataMsg] = useState<string | null>(null);
+  const [changePasswordVisible, setChangePasswordVisible] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const { showToast } = useToast();
 
   const loadReminders = async () => {
     try {
@@ -128,6 +136,28 @@ export default function SettingsScreen() {
     return () => clearTimeout(t);
   }, [dataMsg]);
 
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) {
+      showToast('Password must be at least 8 characters', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('Passwords do not match', 'error');
+      return;
+    }
+    setPasswordLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordLoading(false);
+    if (error) {
+      showToast(error.message, 'error');
+      return;
+    }
+    showToast('Password updated', 'success');
+    setChangePasswordVisible(false);
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
   const handleClearCache = async () => {
     try {
       const keys = await AsyncStorage.getAllKeys();
@@ -143,16 +173,34 @@ export default function SettingsScreen() {
   const handleExportCsv = async () => {
     try {
       const collection = await getCollection();
-      const header = 'Plant Name,Status,Rating,Notes,Added Date';
-      const rows = collection.map(e =>
-        [
+      const plantNames = collection.map(e => e.name);
+
+      const [wateringResults, healthLogs] = await Promise.all([
+        Promise.all(collection.map(async e => ({ name: e.name, log: await getWateringLog(e.name) }))),
+        getAllHealthLogs(plantNames),
+      ]);
+
+      const wateringByName: Record<string, Awaited<ReturnType<typeof getWateringLog>>> = {};
+      for (const { name, log } of wateringResults) wateringByName[name] = log;
+
+      const header = 'Plant Name,Status,Rating,Notes,Added Date,Watering Interval (days),Last Watered,Watering Count,Health Notes Count,Latest Health Note';
+      const rows = collection.map(e => {
+        const wLog = wateringByName[e.name] ?? [];
+        const hLog = healthLogs[e.name] ?? [];
+        const latestNote = (hLog[0]?.note ?? '').replace(/,/g, ';').replace(/[\r\n]+/g, ' ');
+        return [
           csvField(e.name),
           csvField(e.status),
           csvField(e.rating),
           csvField(e.notes),
           csvField(new Date(e.addedAt).toLocaleDateString()),
-        ].join(',')
-      );
+          csvField(e.watering_interval_days),
+          csvField(wLog[0]?.watered_at ? new Date(wLog[0].watered_at).toLocaleDateString() : ''),
+          csvField(wLog.length),
+          csvField(hLog.length),
+          csvField(latestNote),
+        ].join(',');
+      });
       const csv = [header, ...rows].join('\n');
 
       if (Platform.OS === 'web') {
@@ -253,6 +301,7 @@ export default function SettingsScreen() {
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   return (
+    <>
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       {Platform.OS === 'web' && (
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
@@ -344,6 +393,13 @@ export default function SettingsScreen() {
           <Text style={s.rowTitle}>Edit Profile</Text>
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.row, s.rowBorder]}
+          onPress={() => setChangePasswordVisible(true)}
+        >
+          <Text style={s.rowTitle}>Change Password</Text>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[s.dangerRow, s.rowBorder]} onPress={handleLogout}>
           <Text style={s.dangerText}>Log out</Text>
         </TouchableOpacity>
@@ -385,6 +441,58 @@ export default function SettingsScreen() {
         <Text style={s.aboutTagline}>Your AI Botanical Assistant</Text>
       </View>
     </ScrollView>
+
+    <Modal
+      visible={changePasswordVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setChangePasswordVisible(false)}
+    >
+      <View style={s.modalOverlay}>
+        <View style={s.modalBox}>
+          <Text style={s.modalTitle}>Change Password</Text>
+
+          <Text style={s.modalLabel}>NEW PASSWORD</Text>
+          <TextInput
+            style={s.modalInput}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+            placeholder="Min. 8 characters"
+            placeholderTextColor={theme.textMuted}
+          />
+
+          <Text style={s.modalLabel}>CONFIRM PASSWORD</Text>
+          <TextInput
+            style={s.modalInput}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            placeholder="Re-enter password"
+            placeholderTextColor={theme.textMuted}
+          />
+
+          <TouchableOpacity
+            style={[s.modalSaveBtn, passwordLoading && s.modalBtnDisabled]}
+            onPress={handleChangePassword}
+            disabled={passwordLoading}
+          >
+            {passwordLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={s.modalSaveBtnText}>Update Password</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setChangePasswordVisible(false); setNewPassword(''); setConfirmPassword(''); }}
+            style={s.modalCancelBtn}
+          >
+            <Text style={s.modalCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -424,4 +532,15 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   // data message banner
   dataMsgBanner: { backgroundColor: t.surfaceGreenSubtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 10, borderWidth: 1, borderColor: t.accentMid },
   dataMsgText:   { color: t.accentDark, fontWeight: '700', fontSize: 14, textAlign: 'center' as const },
+  // change password modal
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalBox:        { backgroundColor: t.surface, borderRadius: 24, padding: 24, width: '100%', maxWidth: 400 },
+  modalTitle:      { fontSize: 18, fontWeight: '800', color: t.textTitle, marginBottom: 20 },
+  modalLabel:      { fontSize: 12, fontWeight: '700', color: t.textMuted, letterSpacing: 0.8, marginBottom: 6, marginTop: 12 },
+  modalInput:      { backgroundColor: t.background, borderWidth: 1.5, borderColor: t.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: t.textPrimary },
+  modalSaveBtn:    { backgroundColor: t.accent, padding: 14, borderRadius: 16, alignItems: 'center' as const, marginTop: 20 },
+  modalSaveBtnText:{ color: '#fff', fontWeight: '700', fontSize: 15 },
+  modalCancelBtn:  { alignItems: 'center' as const, paddingVertical: 12 },
+  modalCancelText: { color: t.textMuted, fontSize: 14, fontWeight: '600' },
+  modalBtnDisabled:{ opacity: 0.5 },
 });

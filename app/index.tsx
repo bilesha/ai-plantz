@@ -14,7 +14,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import PlantCareTips from "../components/PlantCareTips";
 import ScreenLayout from "../components/ScreenLayout";
-import { getDailyPlant, PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
+import { PLANT_SUGGESTIONS, RANDOM_PLANTS } from "../constants/plants";
 import { useTheme } from "../constants/theme";
 import { getPlantTips } from "../utilities/fetchPlantTips";
 import { getHistory, savePlant, deleteHistoryItem, clearHistory } from "../utilities/storage";
@@ -49,7 +49,11 @@ export default function Index() {
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
 
-  const dailyPlant = useMemo(() => getDailyPlant(), []);
+  const dailyPlant = useMemo(() => {
+    const seed = new Date().toDateString();
+    const hash = seed.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return RANDOM_PLANTS[hash % RANDOM_PLANTS.length];
+  }, []);
 
   const [plant, setPlant] = useState("");
   const [summary, setSummary] = useState("");
@@ -193,15 +197,6 @@ export default function Index() {
         </Animated.View>
       )}
 
-      <TouchableOpacity
-        style={s.potdCard}
-        onPress={() => { setPlant(dailyPlant); handleGetTips(dailyPlant); }}
-      >
-        <Text style={s.potdLabel}>PLANT OF THE DAY</Text>
-        <Text style={s.potdName}>{dailyPlant}</Text>
-        <Text style={s.potdCta}>Get care tips →</Text>
-      </TouchableOpacity>
-
       <View style={s.inputWrapper}>
         <View style={s.inputCard}>
           <TextInput
@@ -230,6 +225,19 @@ export default function Index() {
           </Animated.View>
         )}
       </View>
+
+      <TouchableOpacity
+        style={s.potdCard}
+        onPress={() => router.push({
+          pathname: '/screens/PlantDetailsAiGenerated',
+          params: { plantName: dailyPlant },
+        })}
+        activeOpacity={0.85}
+      >
+        <Text style={s.potdLabel}>PLANT OF THE DAY 🌿</Text>
+        <Text style={s.potdName}>{dailyPlant}</Text>
+        <Text style={s.potdCta}>Discover care tips →</Text>
+      </TouchableOpacity>
 
       <View style={s.buttonRow}>
         <TouchableOpacity

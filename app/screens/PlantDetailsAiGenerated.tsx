@@ -15,6 +15,7 @@ import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCac
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
 import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, uploadPlantPhoto } from "../../logic/collectionLogic";
 import { useToast } from "../../context/ToastContext";
+import HealthLogSection from "../../components/HealthLogSection";
 import WateringSection from "../../components/WateringSection";
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from "../../types";
 
@@ -552,6 +553,7 @@ export default function PlantDetailsAiGenerated() {
           )}
 
           <WateringSection plantName={safePlantName} isOwner={!!currentUserId} />
+          <HealthLogSection plantName={safePlantName} isOwner={!!currentUserId} />
         </View>
       )}
     </ScrollView>

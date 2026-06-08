@@ -79,6 +79,10 @@ type SuggestedUser = {
   follower_count: number;
 };
 
+type PlantResult = {
+  plant_name: string;
+};
+
 async function getTrendingPlants(): Promise<TrendingPlant[]> {
   const { data, error } = await supabase.rpc('get_trending_plants', { limit_count: 10 });
   if (error || !data) return [];
@@ -126,10 +130,12 @@ export default function DiscoverScreen() {
   const s = useMemo(() => styles(theme), [theme]);
   const { showToast } = useToast();
 
-  const [query, setQuery]       = useState('');
-  const [results, setResults]   = useState<ProfileResult[]>([]);
-  const [loading, setLoading]   = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [query, setQuery]             = useState('');
+  const [searchType, setSearchType]   = useState<'users' | 'plants'>('users');
+  const [results, setResults]         = useState<ProfileResult[]>([]);
+  const [plantResults, setPlantResults] = useState<PlantResult[]>([]);
+  const [loading, setLoading]         = useState(false);
+  const [searched, setSearched]       = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [trending, setTrending]               = useState<TrendingPlant[]>([]);
@@ -192,6 +198,7 @@ export default function DiscoverScreen() {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
       setResults([]);
+      setPlantResults([]);
       setSearched(false);
       return;
     }
@@ -199,13 +206,33 @@ export default function DiscoverScreen() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, username, bio, avatar_url')
-          .ilike('username', `%${trimmed}%`)
-          .limit(30);
-
-        setResults((data ?? []) as ProfileResult[]);
+        if (searchType === 'users') {
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, username, bio, avatar_url')
+            .ilike('username', `%${trimmed}%`)
+            .limit(30);
+          setResults((data ?? []) as ProfileResult[]);
+          setPlantResults([]);
+        } else {
+          const { data } = await supabase
+            .from('plant_collection')
+            .select('plant_name')
+            .ilike('plant_name', `%${trimmed}%`)
+            .limit(50);
+          const seen = new Set<string>();
+          const unique: PlantResult[] = [];
+          for (const row of (data ?? []) as any[]) {
+            const key = (row.plant_name as string).toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              unique.push({ plant_name: row.plant_name });
+            }
+            if (unique.length === 8) break;
+          }
+          setPlantResults(unique);
+          setResults([]);
+        }
         setSearched(true);
       } finally {
         setLoading(false);
@@ -213,7 +240,7 @@ export default function DiscoverScreen() {
     }, 400);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query]);
+  }, [query, searchType]);
 
   const showSuggested = !!viewerId && (suggestedLoading || suggested.length > 0);
 
@@ -222,102 +249,12 @@ export default function DiscoverScreen() {
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <Text style={s.title}>Discover</Text>
 
-      {(trendingLoading || trending.length > 0) && (
-        <View style={s.trendingSection}>
-          <Text style={s.trendingHeading}>TRENDING PLANTS 🌿</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.trendingScroll}
-          >
-            {trendingLoading
-              ? [0, 1, 2].map(i => <View key={i} style={s.skeletonPill} />)
-              : trending.map(item => (
-                  <TouchableOpacity
-                    key={item.plant_name}
-                    style={s.trendingPill}
-                    onPress={() => router.push({
-                      pathname: '/screens/PlantDetailsAiGenerated',
-                      params: { plantName: item.plant_name },
-                    })}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={s.pillName} numberOfLines={1}>{item.plant_name}</Text>
-                    <Text style={s.pillCount}>
-                      {item.collection_count} collector{item.collection_count !== 1 ? 's' : ''} · ❤️ {item.like_count}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {showSuggested && (
-        <View style={s.suggestedSection}>
-          <Text style={s.suggestedHeading}>SUGGESTED FOR YOU 👥</Text>
-          <View style={s.suggestedCard}>
-            {suggestedLoading
-              ? [0, 1, 2].map(i => (
-                  <View key={i} style={[s.skeletonSugRow, i < 2 && s.skeletonSugBorder]} />
-                ))
-              : suggested.map((user, i) => {
-                  const name = user.username ?? 'Plant Lover';
-                  return (
-                    <View key={user.id} style={[s.sugRow, i < suggested.length - 1 && s.sugRowBorder]}>
-                      <TouchableOpacity
-                        style={s.sugLeft}
-                        onPress={() => router.push({ pathname: '/screens/publicProfile', params: { userId: user.id } })}
-                        activeOpacity={0.7}
-                      >
-                        <Avatar url={user.avatar_url} name={name} size={44} style={s.sugAvatar} />
-                        <View>
-                          <Text style={s.sugName}>{name}</Text>
-                          <Text style={s.sugMeta}>
-                            {user.plant_count} plant{user.plant_count !== 1 ? 's' : ''} · {user.follower_count} follower{user.follower_count !== 1 ? 's' : ''}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={s.followBtn}
-                        onPress={() => handleFollowSuggested(user.id)}
-                      >
-                        <Text style={s.followBtnText}>Follow</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })
-            }
-          </View>
-        </View>
-      )}
-
-      {(activityLoading || activity.length > 0) && (
-        <View style={s.activitySection}>
-          <Text style={s.activityHeading}>FOLLOWING ACTIVITY 🌱</Text>
-          <View style={s.activityCard}>
-            {activityLoading
-              ? [0, 1].map(i => <View key={i} style={[s.skeletonRow, i === 0 && s.skeletonRowBorder]} />)
-              : activity.map((item, i) => (
-                  <View key={item.id} style={i < activity.length - 1 ? s.activityRowBorder : undefined}>
-                    <FeedItemRow item={item} />
-                  </View>
-                ))
-            }
-          </View>
-          {!activityLoading && activity.length > 0 && (
-            <TouchableOpacity style={s.seeAllBtn} onPress={() => router.push('/screens/feed')}>
-              <Text style={s.seeAllText}>See all activity →</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
       <View style={s.inputCard}>
         <TextInput
           style={s.input}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by username..."
+          placeholder="Search users and plants..."
           placeholderTextColor={theme.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -326,20 +263,44 @@ export default function DiscoverScreen() {
         />
       </View>
 
+      {query.trim().length >= 2 && (
+        <View style={s.typeToggleRow}>
+          <TouchableOpacity
+            style={[s.typeTogglePill, searchType === 'users' && s.typeTogglePillActive]}
+            onPress={() => setSearchType('users')}
+          >
+            <Text style={[s.typeToggleText, searchType === 'users' && s.typeToggleTextActive]}>👥 Users</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.typeTogglePill, searchType === 'plants' && s.typeTogglePillActive]}
+            onPress={() => setSearchType('plants')}
+          >
+            <Text style={[s.typeToggleText, searchType === 'plants' && s.typeToggleTextActive]}>🌿 Plants</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {loading && <ActivityIndicator style={s.spinner} color={theme.accent} />}
 
       {!loading && query.trim().length > 0 && query.trim().length < 2 && (
         <Text style={s.hint}>Type at least 2 characters to search.</Text>
       )}
 
-      {!loading && searched && results.length === 0 && (
+      {!loading && searched && searchType === 'users' && results.length === 0 && (
         <View style={s.emptyState}>
           <Text style={s.emptyIcon}>🔍</Text>
           <Text style={s.emptyText}>No users found for "{query.trim()}".</Text>
         </View>
       )}
 
-      {!loading && results.length > 0 && (
+      {!loading && searched && searchType === 'plants' && plantResults.length === 0 && (
+        <View style={s.emptyState}>
+          <Text style={s.emptyIcon}>🔍</Text>
+          <Text style={s.emptyText}>No plants found for "{query.trim()}".</Text>
+        </View>
+      )}
+
+      {!loading && searchType === 'users' && results.length > 0 && (
         <View style={s.resultsList}>
           {results.map((user, i) => {
             const name = user.username ?? 'Plant Lover';
@@ -362,11 +323,122 @@ export default function DiscoverScreen() {
         </View>
       )}
 
-      {!loading && !searched && query.trim().length === 0 && (
-        <View style={s.emptyState}>
-          <Text style={s.emptyIcon}>👥</Text>
-          <Text style={s.emptyText}>Search for other plant lovers by username.</Text>
+      {!loading && searchType === 'plants' && plantResults.length > 0 && (
+        <View style={s.resultsList}>
+          {plantResults.map((item, i) => (
+            <TouchableOpacity
+              key={item.plant_name}
+              style={[s.resultRow, i < plantResults.length - 1 && s.resultBorder]}
+              onPress={() => router.push({
+                pathname: '/screens/PlantDetailsAiGenerated',
+                params: { plantName: item.plant_name },
+              })}
+              activeOpacity={0.7}
+            >
+              <View style={s.plantResultIcon}>
+                <Text style={s.plantResultEmoji}>🌿</Text>
+              </View>
+              <View style={s.resultText}>
+                <Text style={s.resultName}>{item.plant_name}</Text>
+              </View>
+              <Text style={s.chevron}>›</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+      )}
+
+      {query.trim().length === 0 && (
+        <>
+          {(trendingLoading || trending.length > 0) && (
+            <View style={s.trendingSection}>
+              <Text style={s.trendingHeading}>TRENDING PLANTS 🌿</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.trendingScroll}
+              >
+                {trendingLoading
+                  ? [0, 1, 2].map(i => <View key={i} style={s.skeletonPill} />)
+                  : trending.map(item => (
+                      <TouchableOpacity
+                        key={item.plant_name}
+                        style={s.trendingPill}
+                        onPress={() => router.push({
+                          pathname: '/screens/PlantDetailsAiGenerated',
+                          params: { plantName: item.plant_name },
+                        })}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={s.pillName} numberOfLines={1}>{item.plant_name}</Text>
+                        <Text style={s.pillCount}>
+                          {item.collection_count} collector{item.collection_count !== 1 ? 's' : ''} · ❤️ {item.like_count}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {showSuggested && (
+            <View style={s.suggestedSection}>
+              <Text style={s.suggestedHeading}>SUGGESTED FOR YOU 👥</Text>
+              <View style={s.suggestedCard}>
+                {suggestedLoading
+                  ? [0, 1, 2].map(i => (
+                      <View key={i} style={[s.skeletonSugRow, i < 2 && s.skeletonSugBorder]} />
+                    ))
+                  : suggested.map((user, i) => {
+                      const name = user.username ?? 'Plant Lover';
+                      return (
+                        <View key={user.id} style={[s.sugRow, i < suggested.length - 1 && s.sugRowBorder]}>
+                          <TouchableOpacity
+                            style={s.sugLeft}
+                            onPress={() => router.push({ pathname: '/screens/publicProfile', params: { userId: user.id } })}
+                            activeOpacity={0.7}
+                          >
+                            <Avatar url={user.avatar_url} name={name} size={44} style={s.sugAvatar} />
+                            <View>
+                              <Text style={s.sugName}>{name}</Text>
+                              <Text style={s.sugMeta}>
+                                {user.plant_count} plant{user.plant_count !== 1 ? 's' : ''} · {user.follower_count} follower{user.follower_count !== 1 ? 's' : ''}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={s.followBtn}
+                            onPress={() => handleFollowSuggested(user.id)}
+                          >
+                            <Text style={s.followBtnText}>Follow</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })
+                }
+              </View>
+            </View>
+          )}
+
+          {(activityLoading || activity.length > 0) && (
+            <View style={s.activitySection}>
+              <Text style={s.activityHeading}>FOLLOWING ACTIVITY 🌱</Text>
+              <View style={s.activityCard}>
+                {activityLoading
+                  ? [0, 1].map(i => <View key={i} style={[s.skeletonRow, i === 0 && s.skeletonRowBorder]} />)
+                  : activity.map((item, i) => (
+                      <View key={item.id} style={i < activity.length - 1 ? s.activityRowBorder : undefined}>
+                        <FeedItemRow item={item} />
+                      </View>
+                    ))
+                }
+              </View>
+              {!activityLoading && activity.length > 0 && (
+                <TouchableOpacity style={s.seeAllBtn} onPress={() => router.push('/screens/feed')}>
+                  <Text style={s.seeAllText}>See all activity →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </>
       )}
     </ScrollView>
     </ScreenLayout>
@@ -409,10 +481,19 @@ const styles = (t: Theme) => StyleSheet.create({
   seeAllBtn:          { marginTop: 10, alignSelf: 'flex-end' },
   seeAllText:         { fontSize: 13, fontWeight: '700', color: t.accent },
 
-  inputCard:    { backgroundColor: t.surface, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
+  inputCard:    { backgroundColor: t.surface, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
   input:        { fontSize: 17, color: t.textPrimary, paddingVertical: 14 },
   spinner:      { marginTop: 24 },
   hint:         { fontSize: 14, color: t.textMuted, textAlign: 'center', marginTop: 12 },
+
+  typeToggleRow:        { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  typeTogglePill:       { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 100, borderWidth: 1.5, borderColor: t.border, backgroundColor: t.surface },
+  typeTogglePillActive: { borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },
+  typeToggleText:       { fontSize: 14, fontWeight: '700', color: t.textMuted },
+  typeToggleTextActive: { color: t.accentDark },
+
+  plantResultIcon:  { width: 44, height: 44, borderRadius: 22, backgroundColor: t.surfaceGreenSubtle, justifyContent: 'center', alignItems: 'center' },
+  plantResultEmoji: { fontSize: 20 },
 
   resultsList:  { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   resultRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },

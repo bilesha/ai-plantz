@@ -42,9 +42,9 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Data flow**: All screens call `utilities/fetchPlantTips.ts` → reads `ai_provider` from AsyncStorage → `POST /api/plant-tips` with `{ plantName, aiProvider }` → chosen provider → `{ summary, details }`. The detail screen (`PlantDetailsAiGenerated.tsx`) checks `cache_${plantName}_${provider}` in AsyncStorage first and only calls the API on a miss. Cache keys are per-provider so switching providers always fetches fresh tips.
 
-**Auth flow**: `app/_layout.tsx` wraps the app in `ThemeProvider`, then `RootLayoutInner` listens to `supabase.auth.onAuthStateChange` and redirects unauthenticated users to `/screens/auth`. On `SIGNED_IN` it also calls `migrateLocalCollectionToSupabase()` to move any pre-login local collection data to the cloud.
+**Auth flow**: `app/_layout.tsx` wraps the app in `ThemeProvider` → `ToastProvider` → `RootLayoutInner`. `RootLayoutInner` listens to `supabase.auth.onAuthStateChange` and redirects unauthenticated users to `/screens/auth`. On `SIGNED_IN` it also calls `migrateLocalCollectionToSupabase()` to move any pre-login local collection data to the cloud.
 
-**Navigation**: A `BottomTabBar` component renders 6 tabs (Home, Discover, Collection, History, Profile, Settings). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, auth, username) are NOT wrapped in ScreenLayout and have no tab bar.
+**Navigation**: A `BottomTabBar` component renders 6 tabs (Home, Discover, Collection, History, Profile, Settings). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, followersList, auth, username) are NOT wrapped in ScreenLayout and have no tab bar.
 
 ## Key Architectural Decisions
 
@@ -58,7 +58,7 @@ Three layers, each with a distinct purpose:
 | **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome_v2`, `ai_provider`, `theme_preference` always |
 | **AsyncStorage migration flags** | `collection_migrated_v1` — prevents re-running the one-time data migration |
 
-**The pattern in all three logic/storage modules**: `getUserId()` checks the local Supabase session (no network call). If authenticated, reads come from Supabase. `addToCollection` is awaited and returns `{ success: boolean; error?: string }` — the caller shows a feedback banner on failure. Other write operations (`removeFromCollection`, `updateCollectionEntry`, `logWatering`) remain fire-and-forget. If unauthenticated, everything falls back to AsyncStorage.
+**The pattern in all logic/storage modules**: `getUserId()` checks the local Supabase session (no network call). If authenticated, reads/writes go to Supabase; unauthenticated falls back to AsyncStorage. `addToCollection` returns `{ success: boolean; error?: string }` — the caller shows a toast on failure. `logWatering` returns `Promise<WateringEntry | null>` (not void) so callers can update local state.
 
 ### Supabase tables
 
@@ -66,9 +66,9 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 
 | Table | Key columns | Managed by |
 |---|---|---|
-| `plant_collection` | `user_id`, `plant_name`, `summary`, `details` (jsonb), `status`, `rating`, `notes` | `logic/collectionLogic.ts` |
+| `plant_collection` | `user_id`, `plant_name`, `summary`, `details` (jsonb), `status`, `rating`, `notes`, `photo_url`, `watering_interval_days`, `next_watering_date` | `logic/collectionLogic.ts` |
 | `plant_history` | `user_id`, `plant_name`, `summary`, `details` (jsonb), `is_favorite`, `last_viewed` | `utilities/storage.ts` |
-| `watering_log` | `user_id`, `plant_name`, `watered_at` | `logic/wateringLogic.ts` |
+| `watering_log` | `user_id`, `plant_name`, `watered_at`, `amount_ml`, `notes` | `logic/wateringLogic.ts` |
 | `profiles` | `id` (= auth user id), `username`, `bio`, `avatar_url`, `updated_at` | `app/screens/editProfile.tsx` |
 | `follows` | `follower_id`, `following_id`, unique constraint | `logic/followLogic.ts` |
 
@@ -115,6 +115,14 @@ end;
 $$;
 ```
 
+Migration SQL (run once if upgrading an existing database):
+```sql
+ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS amount_ml integer;
+ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS watering_interval_days integer;
+ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS next_watering_date timestamptz;
+```
+
 ### AsyncStorage keys (always local — never synced to Supabase)
 
 | Key pattern | Value | Purpose |
@@ -125,6 +133,7 @@ $$;
 | `seen_welcome_v2` | `"1"` | Onboarding tour dismissed flag (v2 = 4-step tour) |
 | `ai_provider` | provider id string | Selected AI provider (default: `"gemini"`) |
 | `theme_preference` | `"light"` \| `"dark"` \| `"auto"` | User's theme preference (default: `"auto"`) |
+| `wateringLog_${plantName}` | `WateringEntry[]` JSON | Watering log for unauthenticated users (backward compat: was `number[]`) |
 
 **Image cache has three states**: `undefined` = not yet fetched, `null` = fetched but no image exists (sentinel to skip re-fetch), URL string = cached hit. This three-way distinction lives in `logic/cacheLogic.ts:getPlantImageFromCache`.
 
@@ -135,7 +144,6 @@ type PlantDetails = {
   watering: string;
   light: string;
   fertilizer: string;
-  // optional extended fields returned by the AI
   careLevel?: 'easy' | 'medium' | 'hard';
   funFact?: string;
   toxicity?: string;
@@ -164,6 +172,22 @@ type CollectionEntry = {
   status: OwnershipStatus;
   rating?: number;          // 1–5
   notes?: string;
+  photo_url?: string;
+  next_watering_date?: string;      // ISO date string from plant_collection
+  watering_interval_days?: number;  // days between waterings
+};
+
+// From wateringLogic.ts
+type WateringEntry = {
+  id: string;
+  watered_at: string;   // ISO date string
+  amount_ml?: number;
+  notes?: string;
+};
+
+type WateringInterval = {
+  intervalDays: number | null;
+  nextWateringDate: string | null;  // ISO date string
 };
 ```
 
@@ -174,6 +198,30 @@ The backend accepts `aiProvider` in the `/api/plant-tips` request body. Valid va
 `fetchPlantTips.ts` reads `ai_provider` from AsyncStorage before every request and includes it as `aiProvider`. The settings screen (`app/screens/settings.tsx`) lets users pick their provider; preference is stored under the `ai_provider` key.
 
 `PlantDetailsAiGenerated.tsx` also reads `ai_provider` from AsyncStorage and passes it to cache read/write calls so each provider's tips are cached independently.
+
+### Anthropic API (watering suggestions)
+
+`suggestWateringInterval(plantName)` in `logic/wateringLogic.ts` calls the Anthropic API **directly from the client** via `fetch` (not the Node.js SDK, which is incompatible with React Native). Uses model `claude-haiku-4-5-20251001`, `max_tokens: 100`, prompt: `"How many days between waterings for a ${plantName}? Reply with a single integer only, no other text."` — parses as integer; falls back to `7` if parsing fails or the key is missing. Key sourced from `EXPO_PUBLIC_ANTHROPIC_API_KEY`.
+
+### Watering feature (`logic/wateringLogic.ts` + `components/WateringSection.tsx`)
+
+`wateringLogic.ts` exports:
+- `getWateringLog(plantName)` → `WateringEntry[]` — fetches last 20 entries ordered by `watered_at desc`; AsyncStorage fallback for unauthenticated users with backward-compat conversion from old `number[]` format
+- `logWatering(plantName, amountMl?, notes?, wateredAt?)` → `Promise<WateringEntry | null>` — inserts row; then fire-and-forgets an update to `plant_collection.next_watering_date` if `watering_interval_days` is set
+- `deleteWateringEntry(id)` — fire-and-forget delete
+- `setWateringInterval(plantName, days)` — updates `plant_collection.watering_interval_days` and recalculates `next_watering_date` to `now() + days`
+- `getWateringInterval(plantName)` → `WateringInterval` — reads both fields from `plant_collection`
+- `suggestWateringInterval(plantName)` → `Promise<number>` — Anthropic Haiku call, returns 7 on any failure
+
+`WateringSection` component (`components/WateringSection.tsx`) props: `{ plantName: string, isOwner: boolean }`. Renders inside `PlantDetailsAiGenerated` below the social section. Shows: schedule row (interval or "No schedule set") + "Set Schedule" button (isOwner); next watering date with color coding (red = overdue, amber = due today, green = future); "Log Watering" button (isOwner); history list with show-all toggle and per-entry delete (isOwner). Two modals: Set Schedule (custom days input + ✨ AI Suggest button) and Log Watering (date YYYY-MM-DD, amount ml, notes). No `Alert.alert` — uses `useToast()`.
+
+`collection.tsx` shows a 💧 "Water due" badge on any card where `next_watering_date` is today or in the past.
+
+### Toast system (`context/ToastContext.tsx`)
+
+`ToastProvider` wraps the app in `_layout.tsx` (inside `ThemeProvider`). Renders an absolutely-positioned animated pill at `bottom: 90` (clears the tab bar). Colors: success `#059669`, error `#ef4444`, info `theme.accent`. Uses `FadeInDown`/`FadeOutDown` from `react-native-reanimated`. `toastKey` counter forces remount for back-to-back toasts. Auto-dismisses after 3000 ms.
+
+Usage pattern: `const { showToast } = useToast();` then `showToast('message', 'success' | 'error' | 'info')`.
 
 ### Theme system (`constants/theme.ts` + `context/ThemeContext.tsx`)
 
@@ -200,13 +248,15 @@ Standardised on `StyleSheet.create()` with the theme factory pattern above. `Pla
 
 Tab screens (use ScreenLayout): `index.tsx`, `discover.tsx`, `collection.tsx`, `history.tsx`, `profile.tsx`, `settings.tsx`
 
-Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `editProfile.tsx`, `auth.tsx`, `username.tsx`
+Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `editProfile.tsx`, `followersList.tsx`, `auth.tsx`, `username.tsx`
 
 All tab-screen scroll content should use `paddingBottom: 80` to clear the tab bar.
 
 ### Web compatibility
 
 `Alert.alert` does not work on web. Any confirmation dialog must branch on `Platform.OS === 'web'` and use `window.confirm` on web, `Alert.alert` on native. See `settings.tsx` for the established pattern (`handleLogout`, `handleClearAllData`, `handleDeleteAccount`).
+
+Watering history date input uses `TextInput` (not a native date picker) so it works on web. Watering reminders are hidden on web entirely (`Platform.OS !== 'web'` guard in `PlantDetailsAiGenerated.tsx`).
 
 ### Backend prompt engineering (`backend/src/index.ts`)
 
@@ -222,9 +272,10 @@ The `performLogout()` function in `settings.tsx` cancels all scheduled notificat
 
 **Frontend (`.env` at root)**
 ```
-EXPO_PUBLIC_API_URL=...             # Backend URL exposed to client (must have EXPO_PUBLIC_ prefix)
-EXPO_PUBLIC_SUPABASE_URL=...        # Supabase project URL
-EXPO_PUBLIC_SUPABASE_ANON_KEY=...   # Supabase anon/public key
+EXPO_PUBLIC_API_URL=...                 # Backend URL exposed to client (must have EXPO_PUBLIC_ prefix)
+EXPO_PUBLIC_SUPABASE_URL=...            # Supabase project URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...       # Supabase anon/public key
+EXPO_PUBLIC_ANTHROPIC_API_KEY=...       # Optional — powers AI watering interval suggestions (Haiku)
 ```
 
 **Backend (`backend/.env`)**
@@ -242,15 +293,20 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
 
 - `lib/supabase.ts` — Supabase client (auth storage uses AsyncStorage; imported by logic and screens)
 - `context/ThemeContext.tsx` — `ThemeProvider`, `useThemePreference()` hook, `ThemePreference` type; persists preference to AsyncStorage under `theme_preference`
+- `context/ToastContext.tsx` — `ToastProvider`, `useToast()` hook; global animated pill toast at `bottom: 90`; types: `'success' | 'error' | 'info'`
 - `components/BottomTabBar.tsx` — 6-tab navigation bar; uses `useSegments()` for active detection
 - `components/ScreenLayout.tsx` — wraps tab screens with BottomTabBar; do NOT use on detail screens
+- `components/WateringSection.tsx` — self-contained watering UI: schedule, log watering modal, history; props `{ plantName, isOwner }`
+- `components/PlantSocialSection.tsx` — likes and comments; props `{ plantOwnerUserId, plantName, currentUserId }`
 - `logic/` — pure business logic (no UI imports):
   - `cacheLogic.ts` — AsyncStorage-backed plant details + image cache; all functions take `(plantName, provider)` as args
   - `historyLogic.ts` — pure functions: `sortHistoryByDate`, `toggleFavoriteLogic`, `removeHistoryItem`
   - `reminderLogic.ts` — Expo Notifications scheduling; uses AsyncStorage for notification IDs
-  - `collectionLogic.ts` — Supabase `plant_collection` CRUD; `addToCollection` returns `{ success, error? }`; exports `migrateLocalCollectionToSupabase()`, `getPublicCollection(userId)`
-  - `wateringLogic.ts` — Supabase `watering_log` insert/query; `logWatering` is fire-and-forget
+  - `collectionLogic.ts` — Supabase `plant_collection` CRUD; `addToCollection` returns `{ success, error? }`; exports `migrateLocalCollectionToSupabase()`, `getPublicCollection(userId)`, `uploadPlantPhoto()`
+  - `wateringLogic.ts` — `getWateringLog`, `logWatering` (returns entry, updates next_watering_date), `deleteWateringEntry`, `setWateringInterval`, `getWateringInterval`, `suggestWateringInterval` (Anthropic Haiku direct fetch)
   - `followLogic.ts` — Supabase `follows` table CRUD: `followUser`, `unfollowUser`, `isFollowing`, `getFollowerCount`, `getFollowingCount`
+  - `socialLogic.ts` — `getLikes`, `toggleLike`, `getComments`, `addComment`, `deleteComment`; wraps `plant_likes` and `plant_comments` tables
+  - `profileLogic.ts` — `uploadAvatar(uri)`, `updateBio(bio)`, `getProfileStats(userId)` (follower/following/plant/likes counts)
 - `utilities/` — API/network helpers:
   - `fetchPlantTips.ts` — reads `ai_provider` from AsyncStorage, calls backend `/api/plant-tips` with `{ plantName, aiProvider }`
   - `fetchPlantImage.ts` — queries Wikipedia REST API for thumbnails
@@ -258,13 +314,14 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
 - `app/screens/` — all route screens:
   - `auth.tsx` — login / signup
   - `username.tsx` — post-signup username setup (saves to `auth.users` metadata)
-  - `profile.tsx` — **view screen**: shows avatar, username, email, follower/following/plants stats, bio, Edit Profile button; collection grouped by status; uses ScreenLayout + useFocusEffect to refresh after edit
-  - `editProfile.tsx` — **edit screen**: TextInputs for username/bio/avatar URL, handleSave with validation; detail screen (no ScreenLayout, no tab bar); navigated to from profile.tsx and settings.tsx
+  - `profile.tsx` — **view screen**: shows avatar, username, email, follower/following/plants stats, bio, Edit Profile button; collection grouped by status; uses ScreenLayout + useFocusEffect to refresh after edit; tapping follower/following counts navigates to `followersList`
+  - `editProfile.tsx` — **edit screen**: TextInputs for username/bio/avatar URL, handleSave with validation; detail screen (no ScreenLayout, no tab bar)
+  - `followersList.tsx` — followers or following list; params `{ userId, type: 'followers'|'following', username }`; two-step fetch (follow rows → profiles); optimistic follow toggle with rollback
   - `history.tsx` — search history with favourites filter; rich empty states with nav buttons to home
-  - `collection.tsx` — plant collection with status filter (own / want / tried); rich empty state with nav button to home
-  - `PlantDetailsAiGenerated.tsx` — care tips, watering log, collection management, reminders; reads `ai_provider` from AsyncStorage for per-provider cache and provider badge; shows green/red save feedback banner (auto-dismisses after 4 s)
+  - `collection.tsx` — plant collection with status filter (own / want / tried) and sort; 💧 overdue badge; rich empty state
+  - `PlantDetailsAiGenerated.tsx` — care tips, collection management, photo upload, push reminders, social section (`PlantSocialSection`), watering section (`WateringSection`); reads `ai_provider` from AsyncStorage for per-provider cache and provider badge
   - `settings.tsx` — profile quick-access card; APPEARANCE (light/dark/auto theme); REMINDERS; AI PROVIDER; ACCOUNT (Edit Profile, Log out, Delete Account); DATA (Clear Cache, Export Collection CSV, Clear all data); ABOUT; web-only back button
-  - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Following Activity feed (recent collection adds from followed users); debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
+  - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Suggested Users section; Following Activity feed; debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
   - `publicProfile.tsx` — public view of another user's profile and collection; follow/unfollow button
 - `constants/` — static data and theme: `plants.ts` (PLANT_SUGGESTIONS, RANDOM_PLANTS), `theme.ts`
 - `styles/` — separated StyleSheet files for larger screens
@@ -282,7 +339,7 @@ All test files are in `__tests__/`. Run a single file: `npm test -- --testPathPa
 | `fetchPlantImage.test.ts` | Wikipedia image fetch — success, no image, network error |
 | `reminderLogic.test.ts` | `scheduleWateringReminder`, `cancelWateringReminder`, `getWateringReminder`; mocks `expo-notifications` and `react-native` Platform |
 
-The Supabase-backed modules (`collectionLogic`, `wateringLogic`, `storage`, `followLogic`) are not unit-tested — they require a live Supabase connection. AsyncStorage is mocked in all tests via `@react-native-async-storage/async-storage/jest/async-storage-mock`. Always `AsyncStorage.clear()` in `beforeEach` to prevent test bleed.
+The Supabase-backed modules (`collectionLogic`, `wateringLogic`, `storage`, `followLogic`, `socialLogic`, `profileLogic`) are not unit-tested — they require a live Supabase connection. AsyncStorage is mocked in all tests via `@react-native-async-storage/async-storage/jest/async-storage-mock`. Always `AsyncStorage.clear()` in `beforeEach` to prevent test bleed.
 
 ## Docker
 

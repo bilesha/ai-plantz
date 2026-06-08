@@ -216,6 +216,27 @@ export async function isInCollection(name: string): Promise<boolean> {
 // Run in Supabase SQL editor to allow unauthenticated reads of other users' collections:
 //   create policy "public read" on plant_collection for select using (true);
 // The existing "own rows only" policy continues to govern INSERT/UPDATE/DELETE.
+export type CollectionStats = { own: number; want: number; tried: number };
+
+export async function getCollectionStats(userId: string): Promise<CollectionStats> {
+  const { data, error } = await supabase
+    .from('plant_collection')
+    .select('status')
+    .eq('user_id', userId);
+
+  if (error || !data) return { own: 0, want: 0, tried: 0 };
+
+  return (data as { status: string }[]).reduce<CollectionStats>(
+    (acc, row) => {
+      if (row.status === 'own') acc.own++;
+      else if (row.status === 'want') acc.want++;
+      else if (row.status === 'tried') acc.tried++;
+      return acc;
+    },
+    { own: 0, want: 0, tried: 0 },
+  );
+}
+
 export async function getPublicCollection(userId: string): Promise<CollectionEntry[]> {
   const { data, error } = await supabase
     .from('plant_collection')

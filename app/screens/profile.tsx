@@ -16,7 +16,7 @@ import {
 import { useTheme, type Theme } from '../../constants/theme';
 import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
-import { getCollection } from '../../logic/collectionLogic';
+import { getCollection, getCollectionStats, type CollectionStats } from '../../logic/collectionLogic';
 import { getProfileStats, uploadAvatar, updateBio } from '../../logic/profileLogic';
 import { getUnreadCount } from '../../logic/notificationLogic';
 import { useToast } from '../../context/ToastContext';
@@ -64,6 +64,7 @@ export default function ProfileScreen() {
   const [loading, setLoading]                 = useState(true);
   const [error, setError]                     = useState<string | null>(null);
   const [unreadCount, setUnreadCount]         = useState(0);
+  const [collectionStats, setCollectionStats] = useState<CollectionStats>({ own: 0, want: 0, tried: 0 });
   const [showBioModal, setShowBioModal]       = useState(false);
   const [draftBio, setDraftBio]               = useState('');
 
@@ -77,11 +78,12 @@ export default function ProfileScreen() {
       setEmail(user.email ?? '');
       setUserId(user.id);
 
-      const [profileRes, collectionData, stats, unread] = await Promise.all([
+      const [profileRes, collectionData, stats, unread, cStats] = await Promise.all([
         supabase.from('profiles').select('username, bio, avatar_url').eq('id', user.id).maybeSingle(),
         getCollection(),
         getProfileStats(user.id),
         getUnreadCount(),
+        getCollectionStats(user.id),
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -91,6 +93,7 @@ export default function ProfileScreen() {
       setFollowingCount(stats.followingCount);
       setLikesReceived(stats.likesReceived);
       setUnreadCount(unread);
+      setCollectionStats(cStats);
       setAvatarError(false);
     } catch {
       setError('Could not load profile.');
@@ -244,6 +247,21 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          <View style={s.collectionStatsRow}>
+            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.own }]}>
+              <Text style={[s.collectionStatNum, { color: STATUS_COLORS.own }]}>{collectionStats.own}</Text>
+              <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.own }]}>🌿 Owned</Text>
+            </View>
+            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.want }]}>
+              <Text style={[s.collectionStatNum, { color: STATUS_COLORS.want }]}>{collectionStats.want}</Text>
+              <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.want }]}>✨ Wanted</Text>
+            </View>
+            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.tried }]}>
+              <Text style={[s.collectionStatNum, { color: STATUS_COLORS.tried }]}>{collectionStats.tried}</Text>
+              <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.tried }]}>🌱 Tried</Text>
+            </View>
+          </View>
+
           <View style={s.bioRow}>
             {profile?.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
             <TouchableOpacity onPress={() => { setDraftBio(profile?.bio ?? ''); setShowBioModal(true); }}>
@@ -356,6 +374,11 @@ const styles = (t: Theme) => StyleSheet.create({
   statCount:          { fontSize: 18, fontWeight: '900', color: t.textPrimary },
   statLabel:          { fontSize: 12, color: t.textMuted, marginTop: 2 },
   statDivider:        { width: 1, height: 28, backgroundColor: t.border },
+
+  collectionStatsRow:  { flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: 4 },
+  collectionStatPill:  { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 16, borderWidth: 1.5, backgroundColor: t.surface },
+  collectionStatNum:   { fontSize: 18, fontWeight: '900' },
+  collectionStatLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
 
   bioRow:             { alignItems: 'center', marginBottom: 8 },
   bio:                { fontSize: 14, color: t.textSecondary, textAlign: 'center', lineHeight: 20, maxWidth: 280, marginBottom: 6 },

@@ -17,6 +17,7 @@ import { useTheme, type Theme } from '../../constants/theme';
 import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
 import { getCollection, getCollectionStats, type CollectionStats } from '../../logic/collectionLogic';
+import { getDeathLog } from '../../logic/deathLogLogic';
 import { getProfileStats, uploadAvatar, updateBio } from '../../logic/profileLogic';
 import { getUnreadCount } from '../../logic/notificationLogic';
 import { useToast } from '../../context/ToastContext';
@@ -65,6 +66,7 @@ export default function ProfileScreen() {
   const [error, setError]                     = useState<string | null>(null);
   const [unreadCount, setUnreadCount]         = useState(0);
   const [collectionStats, setCollectionStats] = useState<CollectionStats>({ own: 0, want: 0, tried: 0 });
+  const [deathCount, setDeathCount]           = useState(0);
   const [showBioModal, setShowBioModal]       = useState(false);
   const [draftBio, setDraftBio]               = useState('');
 
@@ -78,12 +80,13 @@ export default function ProfileScreen() {
       setEmail(user.email ?? '');
       setUserId(user.id);
 
-      const [profileRes, collectionData, stats, unread, cStats] = await Promise.all([
+      const [profileRes, collectionData, stats, unread, cStats, deaths] = await Promise.all([
         supabase.from('profiles').select('username, bio, avatar_url').eq('id', user.id).maybeSingle(),
         getCollection(),
         getProfileStats(user.id),
         getUnreadCount(),
         getCollectionStats(user.id),
+        getDeathLog(),
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -94,6 +97,7 @@ export default function ProfileScreen() {
       setLikesReceived(stats.likesReceived);
       setUnreadCount(unread);
       setCollectionStats(cStats);
+      setDeathCount(deaths.length);
       setAvatarError(false);
     } catch {
       setError('Could not load profile.');
@@ -259,6 +263,10 @@ export default function ProfileScreen() {
             <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.tried }]}>
               <Text style={[s.collectionStatNum, { color: STATUS_COLORS.tried }]}>{collectionStats.tried}</Text>
               <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.tried }]}>🌱 Tried</Text>
+            </View>
+            <View style={[s.collectionStatPill, { borderColor: '#ef4444' }]}>
+              <Text style={[s.collectionStatNum, { color: '#ef4444' }]}>{deathCount}</Text>
+              <Text style={[s.collectionStatLabel, { color: '#ef4444' }]}>☠️ Lost</Text>
             </View>
           </View>
 

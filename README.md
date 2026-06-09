@@ -195,6 +195,22 @@ npm run ios
 npm run web
 ```
 
+## Local Development
+
+### Running the full stack locally
+1. Start the backend: `cd backend && npm run dev` — verify with `GET http://localhost:5000/health`
+2. Start the frontend: `npm start` then press `w` for web, `a` for Android, `i` for iOS
+3. Set `EXPO_PUBLIC_API_URL=http://localhost:5000` in `.env` (not the deployed Render URL)
+
+### Recommended AI provider for local development
+Use **Groq** for local development and testing — it has a generous free tier and does not rate limit aggressively. Set it in Settings or add to AsyncStorage. Avoid Gemini for repeated/automated runs.
+
+### Mock mode for automated testing
+Set `MOCK_MODE=true` in `backend/.env` to disable all AI provider calls. The `/api/plant-tips` endpoint returns a fixed realistic response instantly — no rate limits, no cold starts, free to run repeatedly. Use this for automated test runs. Set `MOCK_MODE=false` for integration tests that verify the real AI contract.
+
+### Backend cold starts (Render free tier)
+The deployed backend sleeps after inactivity. Always run the backend locally for development and testing. If using the deployed URL, hit `GET /health` first and wait for a 200 before running tests.
+
 ## Project Structure
 
 ```
@@ -244,7 +260,7 @@ ai-plantz/
 │   ├── fetchPlantImage.ts                # Wikipedia thumbnail fetch
 │   └── storage.ts                        # plant_history CRUD
 ├── types.ts                              # PlantDetails, PlantEntry, CollectionEntry, OwnershipStatus
-└── __tests__/                            # Jest test suite (50 tests)
+└── __tests__/                            # Jest test suite (147 tests, 12 files)
 ```
 
 ## Backend API
@@ -282,7 +298,7 @@ Rate-limited to 10 requests per IP per minute.
 ## Running Tests
 
 ```bash
-npm test                                    # all 50 tests
+npm test                                    # all 147 tests
 npm test -- --testPathPattern=history      # single file
 ```
 
@@ -293,6 +309,41 @@ npm test -- --testPathPattern=history      # single file
 | `fetchPlantTips.test.ts` | `getPlantTips` — happy path, errors, `aiProvider` field |
 | `fetchPlantImage.test.ts` | Wikipedia image fetch — success, no image, network error |
 | `reminderLogic.test.ts` | Schedule, cancel, and get watering reminders |
+| `utils.test.ts` | `csvField` CSV escaping; `dailyPlantHash` determinism and bounds |
+| `collectionLogic.test.ts` | `getCollectionStats`, `getCollectionEntry`, `getPublicCollection` |
+| `healthLogLogic.test.ts` | `getRecentHealthLogCounts`, `getAllHealthLogs`, `addHealthEntry` |
+| `wateringLogic.test.ts` | `formatRelativeDate`; `getWateringLog`, `logWatering`, `getWateringInterval`, `suggestWateringInterval` |
+| `followLogic.test.ts` | `isFollowing`, `getFollowerCount`, `getFollowingCount`, `followUser`, `unfollowUser` |
+| `socialLogic.test.ts` | `getLikes`, `toggleLike`, `getComments`, `addComment` |
+| `profileLogic.test.ts` | `updateBio`, `getProfileStats` |
+
+## Testing Strategy
+
+| Layer | Tool | Purpose |
+|---|---|---|
+| Unit | Jest | Logic functions, pure utilities |
+| E2E web | Playwright + mock mode | UI flows, navigation, rendering |
+| Integration | Playwright + real AI | AI response contract, field validation |
+| Mobile E2E | Appium | Native flows on device/simulator |
+
+### Unit tests
+```bash
+npm test                                        # all 147 tests
+npm test -- --testPathPattern=wateringLogic    # single suite
+```
+
+### Playwright (web E2E)
+Requires the frontend running on web and the backend running locally with `MOCK_MODE=true`.
+```bash
+npm run web                                    # terminal 1
+cd backend && MOCK_MODE=true npm run dev       # terminal 2
+npx playwright test                            # terminal 3
+```
+
+### testID convention
+Every interactive element and every key output element must have a `testID` prop added at build time — not retrofitted later. On Expo web, `testID` renders as `data-testid` and is the only reliable selector strategy.
+
+Never place `testID` on `Animated.View` — it does not render to the DOM reliably on Expo web. Use a plain `View` wrapper instead.
 
 ## Docker
 

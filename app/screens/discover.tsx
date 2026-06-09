@@ -43,6 +43,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -50,13 +51,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { PLANT_SUGGESTIONS } from '../../constants/plants';
 import { useTheme, type Theme } from '../../constants/theme';
 import ScreenLayout from '../../components/ScreenLayout';
 import { supabase } from '../../lib/supabase';
 import { getFeed, type FeedItem } from '../../logic/feedLogic';
+import { getActiveListings, type ListingWithProfile } from '../../logic/listingLogic';
 import { followUser } from '../../logic/followLogic';
 import { useToast } from '../../context/ToastContext';
 import FeedItemRow from '../../components/FeedItem';
+import {
+  getCurrentNominations,
+  getUserNominationThisWeek,
+  nominatePlant,
+  voteForNomination,
+  type PotWNomination,
+} from '../../logic/potwLogic';
 
 type ProfileResult = {
   id: string;
@@ -140,6 +150,8 @@ export default function DiscoverScreen() {
 
   const [trending, setTrending]               = useState<TrendingPlant[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [marketplace, setMarketplace]             = useState<ListingWithProfile[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = useState(true);
   const [activity, setActivity]               = useState<FeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [suggested, setSuggested]             = useState<SuggestedUser[]>([]);
@@ -147,10 +159,20 @@ export default function DiscoverScreen() {
   // undefined = auth not yet resolved; null = not logged in; string = user id
   const [viewerId, setViewerId] = useState<string | null | undefined>(undefined);
 
+  const [potwNominations, setPotwNominations]         = useState<PotWNomination[]>([]);
+  const [potwLoading, setPotwLoading]                 = useState(true);
+  const [showNominateModal, setShowNominateModal]     = useState(false);
+  const [nominatePlantName, setNominatePlantName]     = useState('');
+  const [nominateReason, setNominateReason]           = useState('');
+  const [nominateSuggestions, setNominateSuggestions] = useState<string[]>([]);
+  const [submittingNomination, setSubmittingNomination] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setTrendingLoading(true);
+      setMarketplaceLoading(true);
+      setPotwLoading(true);
 
       (async () => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -158,10 +180,18 @@ export default function DiscoverScreen() {
         if (!active) return;
         setViewerId(uid);
 
-        const trendingData = await getTrendingPlants();
+        const [trendingData, marketplaceData, potwData] = await Promise.all([
+          getTrendingPlants(),
+          getActiveListings(6),
+          getCurrentNominations(),
+        ]);
         if (!active) return;
         setTrending(trendingData);
+        setMarketplace(marketplaceData);
+        setPotwNominations(potwData);
         setTrendingLoading(false);
+        setMarketplaceLoading(false);
+        setPotwLoading(false);
 
         if (uid) setSuggestedLoading(true);
         setActivityLoading(true);
@@ -242,7 +272,56 @@ export default function DiscoverScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, searchType]);
 
+  const handleVote = (nominationId: string) => {
+    if (!viewerId) return;
+    setPotwNominations(prev =>
+      prev
+        .map(n => n.id === nominationId ? { ...n, vote_count: n.vote_count + 1, hasVoted: true } : n)
+        .sort((a, b) => b.vote_count - a.vote_count)
+    );
+    voteForNomination(nominationId);
+  };
+
+  const handleNominateNameChange = (text: string) => {
+    setNominatePlantName(text);
+    const trimmed = text.trim();
+    if (trimmed.length >= 2) {
+      setNominateSuggestions(
+        PLANT_SUGGESTIONS.filter(p => p.toLowerCase().includes(trimmed.toLowerCase())).slice(0, 5)
+      );
+    } else {
+      setNominateSuggestions([]);
+    }
+  };
+
+  const handleNominate = async () => {
+    const name = nominatePlantName.trim();
+    if (!name) { showToast('Enter a plant name', 'error'); return; }
+    setSubmittingNomination(true);
+    try {
+      const nomination = await nominatePlant(name, nominateReason.trim() || undefined);
+      if (nomination) {
+        setPotwNominations(prev =>
+          [...prev, nomination].sort((a, b) => b.vote_count - a.vote_count)
+        );
+        setShowNominateModal(false);
+        setNominatePlantName('');
+        setNominateReason('');
+        setNominateSuggestions([]);
+        showToast('Plant nominated! 🏆', 'success');
+      } else {
+        showToast('Already nominated this week', 'error');
+      }
+    } finally {
+      setSubmittingNomination(false);
+    }
+  };
+
   const showSuggested = !!viewerId && (suggestedLoading || suggested.length > 0);
+  const userAlreadyVotedThisWeek = potwNominations.some(n => n.hasVoted);
+  const myNomination = viewerId
+    ? (potwNominations.find(n => n.user_id === viewerId) ?? null)
+    : null;
 
   return (
     <ScreenLayout>
@@ -251,6 +330,7 @@ export default function DiscoverScreen() {
 
       <View style={s.inputCard}>
         <TextInput
+          testID="discover-search-input"
           style={s.input}
           value={query}
           onChangeText={setQuery}
@@ -266,12 +346,14 @@ export default function DiscoverScreen() {
       {query.trim().length >= 2 && (
         <View style={s.typeToggleRow}>
           <TouchableOpacity
+            testID="search-type-users"
             style={[s.typeTogglePill, searchType === 'users' && s.typeTogglePillActive]}
             onPress={() => setSearchType('users')}
           >
             <Text style={[s.typeToggleText, searchType === 'users' && s.typeToggleTextActive]}>👥 Users</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            testID="search-type-plants"
             style={[s.typeTogglePill, searchType === 'plants' && s.typeTogglePillActive]}
             onPress={() => setSearchType('plants')}
           >
@@ -379,6 +461,102 @@ export default function DiscoverScreen() {
             </View>
           )}
 
+          {(marketplaceLoading || marketplace.length > 0) && (
+            <View testID="marketplace-section" style={s.marketplaceSection}>
+              <Text style={s.marketplaceHeading}>MARKETPLACE 🌿</Text>
+              <View style={s.marketplaceCard}>
+                {marketplaceLoading
+                  ? [0, 1, 2].map(i => <View key={i} style={[s.skeletonRow, i < 2 && s.skeletonRowBorder]} />)
+                  : marketplace.map((item, i) => {
+                      const username = item.profiles?.username ?? 'Plant Lover';
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[s.marketplaceRow, i < marketplace.length - 1 && s.marketplaceRowBorder]}
+                          onPress={() => router.push({ pathname: '/screens/publicProfile', params: { userId: item.user_id } })}
+                          activeOpacity={0.7}
+                        >
+                          <View style={s.marketplaceLeft}>
+                            <Text style={s.marketplacePlantName}>{item.plant_name}</Text>
+                            <Text style={s.marketplaceUsername}>@{username}</Text>
+                          </View>
+                          <View style={s.marketplaceTypePill}>
+                            <Text style={s.marketplaceTypePillText}>
+                              {item.listing_type === 'trade' ? '🔄 Trade' :
+                               item.listing_type === 'gift'  ? '🎁 Gift' :
+                               `💰 ${item.price?.toFixed(2) ?? '?'}`}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                }
+              </View>
+            </View>
+          )}
+
+          <View testID="potw-section" style={s.potwSection}>
+            <Text style={s.potwHeading}>PLANT OF THE WEEK 🏆</Text>
+            <View style={s.potwCard}>
+              {potwLoading
+                ? [0, 1, 2].map(i => <View key={i} style={[s.skeletonRow, i < 2 && s.skeletonRowBorder]} />)
+                : potwNominations.length === 0
+                  ? (
+                    <View style={s.potwEmptyBox}>
+                      <Text style={s.potwEmptyText}>No nominations yet this week.</Text>
+                    </View>
+                  )
+                  : potwNominations.map((nom, i) => (
+                    <View key={nom.id} style={[s.potwRow, i < potwNominations.length - 1 && s.potwRowBorder]}>
+                      <TouchableOpacity
+                        style={s.potwLeft}
+                        onPress={() => router.push({
+                          pathname: '/screens/PlantDetailsAiGenerated',
+                          params: { plantName: nom.plant_name },
+                        })}
+                        activeOpacity={0.7}
+                      >
+                        <View style={s.potwRankIcon}>
+                          {i === 0 ? <Text style={s.potwTrophy}>🏆</Text> : null}
+                        </View>
+                        <View style={s.potwTextBlock}>
+                          <Text style={s.potwPlantName}>{nom.plant_name}</Text>
+                          <Text style={s.potwNominator} numberOfLines={2}>
+                            {'by @'}{nom.username ?? 'unknown'}
+                            {nom.reason
+                              ? ` · "${nom.reason.length > 60 ? nom.reason.slice(0, 60) + '…' : nom.reason}"`
+                              : ''}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                      <View style={s.potwRight}>
+                        <Text style={s.potwVoteCount}>{nom.vote_count}</Text>
+                        <TouchableOpacity
+                          style={[s.voteBtn, (userAlreadyVotedThisWeek || !viewerId) && s.voteBtnDisabled]}
+                          disabled={userAlreadyVotedThisWeek || !viewerId}
+                          onPress={() => handleVote(nom.id)}
+                        >
+                          <Text style={s.voteBtnText}>{nom.hasVoted ? '✓' : '👍'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+              }
+            </View>
+
+            {!potwLoading && (
+              myNomination ? (
+                <Text style={s.potwMyNomText}>
+                  {'You nominated: '}<Text style={s.potwMyNomPlant}>{myNomination.plant_name}</Text>
+                </Text>
+              ) : viewerId ? (
+                <TouchableOpacity style={s.nominateBtn} onPress={() => setShowNominateModal(true)}>
+                  <Text style={s.nominateBtnText}>+ Nominate a plant</Text>
+                </TouchableOpacity>
+              ) : null
+            )}
+          </View>
+
           {showSuggested && (
             <View style={s.suggestedSection}>
               <Text style={s.suggestedHeading}>SUGGESTED FOR YOU 👥</Text>
@@ -441,6 +619,81 @@ export default function DiscoverScreen() {
         </>
       )}
     </ScrollView>
+      <Modal
+        testID="potw-nominate-modal"
+        visible={showNominateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNominateModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalBox}>
+            <Text style={s.modalTitle}>Nominate a Plant</Text>
+
+            <Text style={s.modalLabel}>PLANT NAME</Text>
+            <TextInput
+              style={s.modalInput}
+              value={nominatePlantName}
+              onChangeText={handleNominateNameChange}
+              placeholder="e.g. Monstera Deliciosa"
+              placeholderTextColor={theme.textMuted}
+              autoCapitalize="words"
+            />
+            {nominateSuggestions.length > 0 && (
+              <View style={s.suggestionBox}>
+                {nominateSuggestions.map((sug, i) => (
+                  <TouchableOpacity
+                    key={sug}
+                    style={[s.suggestionRow, i < nominateSuggestions.length - 1 && s.suggestionRowBorder]}
+                    onPress={() => {
+                      setNominatePlantName(sug);
+                      setNominateSuggestions([]);
+                    }}
+                  >
+                    <Text style={s.suggestionText}>{sug}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={[s.modalLabel, { marginTop: 16 }]}>REASON (optional)</Text>
+            <TextInput
+              style={[s.modalInput, s.modalInputMultiline]}
+              value={nominateReason}
+              onChangeText={t => setNominateReason(t.slice(0, 150))}
+              placeholder="Why this plant deserves the spotlight..."
+              placeholderTextColor={theme.textMuted}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              maxLength={150}
+            />
+            <Text style={s.charCount}>{nominateReason.length}/150</Text>
+
+            <TouchableOpacity
+              style={[s.modalSaveBtn, submittingNomination && s.btnDisabled]}
+              onPress={handleNominate}
+              disabled={submittingNomination}
+            >
+              {submittingNomination
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={s.modalSaveBtnText}>Nominate</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowNominateModal(false);
+                setNominatePlantName('');
+                setNominateReason('');
+                setNominateSuggestions([]);
+              }}
+              style={s.modalCancelBtn}
+            >
+              <Text style={s.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenLayout>
   );
 }
@@ -457,6 +710,17 @@ const styles = (t: Theme) => StyleSheet.create({
   pillName:         { fontSize: 14, fontWeight: '700', color: t.textPrimary },
   pillCount:        { fontSize: 12, color: t.accent, marginTop: 2, fontWeight: '600' },
   skeletonPill:     { width: 110, height: 52, borderRadius: 24, backgroundColor: t.border, opacity: 0.6 },
+
+  marketplaceSection:      { marginBottom: 24 },
+  marketplaceHeading:      { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
+  marketplaceCard:         { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  marketplaceRow:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14 },
+  marketplaceRowBorder:    { borderBottomWidth: 1, borderBottomColor: t.border },
+  marketplaceLeft:         { flex: 1 },
+  marketplacePlantName:    { fontSize: 15, fontWeight: '700', color: t.textPrimary },
+  marketplaceUsername:     { fontSize: 12, color: t.textMuted, marginTop: 2 },
+  marketplaceTypePill:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: t.surfaceGreen },
+  marketplaceTypePillText: { fontSize: 12, fontWeight: '700' as const, color: t.accentDark },
 
   suggestedSection:  { marginBottom: 24 },
   suggestedHeading:  { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
@@ -507,4 +771,44 @@ const styles = (t: Theme) => StyleSheet.create({
   emptyState:   { alignItems: 'center', marginTop: 48 },
   emptyIcon:    { fontSize: 40, marginBottom: 12 },
   emptyText:    { fontSize: 15, color: t.textMuted, textAlign: 'center' },
+
+  potwSection:      { marginBottom: 24 },
+  potwHeading:      { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },
+  potwCard:         { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  potwRow:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14 },
+  potwRowBorder:    { borderBottomWidth: 1, borderBottomColor: t.border },
+  potwLeft:         { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  potwRankIcon:     { width: 22, alignItems: 'center' },
+  potwTrophy:       { fontSize: 16 },
+  potwTextBlock:    { flex: 1 },
+  potwPlantName:    { fontSize: 15, fontWeight: '700', color: t.textPrimary },
+  potwNominator:    { fontSize: 12, color: t.textMuted, marginTop: 2 },
+  potwRight:        { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
+  potwVoteCount:    { fontSize: 14, fontWeight: '800', color: t.textPrimary, minWidth: 24, textAlign: 'right' },
+  voteBtn:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, alignItems: 'center' },
+  voteBtnDisabled:  { borderColor: t.border, opacity: 0.5 },
+  voteBtnText:      { fontSize: 13, fontWeight: '700', color: t.accent },
+  potwEmptyBox:     { padding: 20, alignItems: 'center' },
+  potwEmptyText:    { fontSize: 14, color: t.textMuted, fontStyle: 'italic' },
+  potwMyNomText:    { fontSize: 13, color: t.textMuted, marginTop: 12, paddingHorizontal: 4 },
+  potwMyNomPlant:   { fontWeight: '700', color: t.accent },
+  nominateBtn:      { marginTop: 12, alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },
+  nominateBtnText:  { color: t.accentDark, fontWeight: '700', fontSize: 13 },
+
+  modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalBox:            { backgroundColor: t.surface, borderRadius: 24, padding: 24, width: '100%', maxWidth: 400 },
+  modalTitle:          { fontSize: 18, fontWeight: '800', color: t.textTitle, marginBottom: 20 },
+  modalLabel:          { fontSize: 12, fontWeight: '700', color: t.textMuted, letterSpacing: 0.8, marginBottom: 6 },
+  modalInput:          { backgroundColor: t.background, borderWidth: 1.5, borderColor: t.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: t.textPrimary },
+  modalInputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+  charCount:           { fontSize: 12, color: t.textMuted, textAlign: 'right', marginTop: 4 },
+  btnDisabled:         { opacity: 0.5 },
+  modalSaveBtn:        { backgroundColor: t.accent, padding: 14, borderRadius: 16, alignItems: 'center', marginTop: 16 },
+  modalSaveBtnText:    { color: '#fff', fontWeight: '700', fontSize: 15 },
+  modalCancelBtn:      { alignItems: 'center', paddingVertical: 12 },
+  modalCancelText:     { color: t.textMuted, fontSize: 14, fontWeight: '600' },
+  suggestionBox:       { backgroundColor: t.surface, borderWidth: 1, borderColor: t.border, borderRadius: 12, marginTop: 4, overflow: 'hidden' },
+  suggestionRow:       { paddingHorizontal: 14, paddingVertical: 10 },
+  suggestionRowBorder: { borderBottomWidth: 1, borderBottomColor: t.border },
+  suggestionText:      { fontSize: 14, color: t.textPrimary },
 });

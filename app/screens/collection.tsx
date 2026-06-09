@@ -108,9 +108,31 @@ export default function CollectionScreen() {
     });
   }, [collection, filterStatus, searchQuery, sortBy]);
 
+  const { wateringSchedule, totalWithDates } = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
+
+    const withDates = collection.filter(p => !!p.next_watering_date);
+    const sorted = [...withDates].sort(
+      (a, b) => new Date(a.next_watering_date!).getTime() - new Date(b.next_watering_date!).getTime()
+    );
+
+    const schedule = sorted.slice(0, 5).map(p => {
+      const date = new Date(p.next_watering_date!);
+      const category: 'overdue' | 'today' | 'upcoming' =
+        date < todayStart ? 'overdue' :
+        date < tomorrowStart ? 'today' : 'upcoming';
+      const daysFromToday = Math.round((date.getTime() - todayStart.getTime()) / 86_400_000);
+      return { ...p, category, daysFromToday };
+    });
+
+    return { wateringSchedule: schedule, totalWithDates: withDates.length };
+  }, [collection]);
+
   const renderItem = useCallback(({ item, index }: { item: CollectionEntry; index: number }) => (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
-      <View style={s.card}>
+      <View testID={`collection-card-${item.name}`} style={s.card}>
         <TouchableOpacity
           style={s.cardContent}
           onPress={() => router.push({
@@ -218,6 +240,46 @@ export default function CollectionScreen() {
         ))}
       </View>
 
+      {wateringSchedule.length > 0 && (
+        <View testID="watering-summary-card" style={s.wateringCard}>
+          <Text style={s.wateringCardHeading}>WATERING SCHEDULE 💧</Text>
+          {wateringSchedule.map((item, i) => (
+            <TouchableOpacity
+              key={item.name}
+              testID={`watering-row-${item.name}`}
+              style={[s.wateringRow, i < wateringSchedule.length - 1 && s.wateringRowBorder]}
+              onPress={() => router.push({
+                pathname: '/screens/PlantDetailsAiGenerated',
+                params: { plantName: item.name, summary: item.summary },
+              })}
+              activeOpacity={0.7}
+            >
+              <Text style={s.wateringRowName}>{item.name}</Text>
+              <View style={[
+                s.wateringPill,
+                item.category === 'overdue'  && { backgroundColor: theme.danger },
+                item.category === 'today'    && { backgroundColor: theme.accent },
+                item.category === 'upcoming' && { backgroundColor: theme.surfaceGreen },
+              ]}>
+                <Text style={[
+                  s.wateringPillText,
+                  item.category === 'upcoming' && { color: theme.accentDark },
+                ]}>
+                  {item.category === 'overdue'  ? 'Overdue' :
+                   item.category === 'today'    ? 'Today' :
+                   `Due in ${item.daysFromToday} day${item.daysFromToday === 1 ? '' : 's'}`}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          {totalWithDates > 5 && (
+            <TouchableOpacity style={s.wateringViewAll} onPress={() => {}}>
+              <Text style={s.wateringViewAllText}>View all in collection →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {filtered.length === 0 ? (
         collection.length === 0 ? (
           <View style={s.emptyState}>
@@ -236,6 +298,7 @@ export default function CollectionScreen() {
         )
       ) : (
         <FlatList
+          testID="collection-list"
           data={filtered}
           keyExtractor={(item) => item.name}
           renderItem={renderItem}
@@ -281,4 +344,13 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   badgeRow:     { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   waterBadge:   { fontSize: 12, color: '#2563eb', fontWeight: '700' },
   healthBadge:  { fontSize: 12, color: '#059669', fontWeight: '700' },
+  wateringCard:        { backgroundColor: t.surface, borderRadius: 20, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, overflow: 'hidden' },
+  wateringCardHeading: { fontSize: 12, fontWeight: '800', letterSpacing: 1, color: t.textMuted, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  wateringRow:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  wateringRowBorder:   { borderBottomWidth: 1, borderBottomColor: t.border },
+  wateringRowName:     { flex: 1, fontSize: 15, fontWeight: '600', color: t.textPrimary },
+  wateringPill:        { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
+  wateringPillText:    { fontSize: 12, fontWeight: '700', color: '#fff' },
+  wateringViewAll:     { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'flex-end' as const },
+  wateringViewAllText: { fontSize: 13, fontWeight: '700', color: t.accent },
 });

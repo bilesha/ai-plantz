@@ -40,8 +40,19 @@ export default function UsernameScreen() {
     setError(null);
     setLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
       const { error: err } = await supabase.auth.updateUser({ data: { username: trimmed } });
       if (err) { setError(err.message); return; }
+
+      if (userId) {
+        const { error: profileErr } = await supabase
+          .from('profiles')
+          .upsert({ id: userId, username: trimmed }, { onConflict: 'id' });
+        if (profileErr) console.warn('profiles upsert failed:', profileErr.message);
+      }
+
       router.replace('/');
     } finally {
       setLoading(false);

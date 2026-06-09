@@ -338,8 +338,25 @@ All test files are in `__tests__/`. Run a single file: `npm test -- --testPathPa
 | `fetchPlantTips.test.ts` | `getPlantTips` — happy path, server errors, network errors; verifies `aiProvider` field is sent; mocks AsyncStorage and `expo/virtual/env` |
 | `fetchPlantImage.test.ts` | Wikipedia image fetch — success, no image, network error |
 | `reminderLogic.test.ts` | `scheduleWateringReminder`, `cancelWateringReminder`, `getWateringReminder`; mocks `expo-notifications` and `react-native` Platform |
+| `utils.test.ts` | `csvField` CSV escaping (null, commas, newlines, quote-escaping); `dailyPlantHash` determinism and bounds |
+| `collectionLogic.test.ts` | `getCollectionStats`, `getCollectionEntry`, `getPublicCollection`; mocks Supabase and AsyncStorage |
+| `healthLogLogic.test.ts` | `getRecentHealthLogCounts`, `getAllHealthLogs`, `addHealthEntry`; authenticated and unauthenticated paths |
+| `wateringLogic.test.ts` | `formatRelativeDate` (pure, Date.now pinned); `getWateringLog`, `logWatering`, `getWateringInterval` (Supabase + AsyncStorage fallback); `suggestWateringInterval` (fetch mock + `expo/virtual/env`) |
+| `followLogic.test.ts` | `isFollowing`, `getFollowerCount`, `getFollowingCount`, `followUser`, `unfollowUser`; authenticated and unauthenticated paths |
+| `socialLogic.test.ts` | `getLikes`, `toggleLike`, `getComments`, `addComment`; multi-table queries use `mockReturnValueOnce` per call |
+| `profileLogic.test.ts` | `updateBio` (throws on unauth/error, resolves on success); `getProfileStats` (four parallel count queries); `uploadAvatar` not tested |
 
-The Supabase-backed modules (`collectionLogic`, `wateringLogic`, `storage`, `followLogic`, `socialLogic`, `profileLogic`) are not unit-tested — they require a live Supabase connection. AsyncStorage is mocked in all tests via `@react-native-async-storage/async-storage/jest/async-storage-mock`. Always `AsyncStorage.clear()` in `beforeEach` to prevent test bleed.
+### Mock patterns used across Supabase test files
+
+All Supabase-backed tests share a `mockQuery` / `makeChain` helper: a chainable object whose methods return `this`, making arbitrary call chains work without extra setup. The chain is awaitable via a custom `then` property so `await supabase.from(...)...` resolves to a controlled `{ data, error, count }` result. `single()` and `maybeSingle()` are separate jest mocks on the chain that can be overridden per test.
+
+**`jest.resetAllMocks()` wipes AsyncStorage implementations.** After a reset, `AsyncStorage.getItem` returns `undefined` rather than reading the in-memory store. Tests that need to simulate stored data should mock `getItem` directly: `(AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify(stored))`. Tests that need to verify a write happened should assert on `AsyncStorage.setItem` calls rather than reading back from storage.
+
+**`expo/virtual/env` mock**: babel-preset-expo rewrites `process.env.EXPO_PUBLIC_*` reads at module level into imports from this virtual ESM module. Any test file for a module that reads such a variable must declare `jest.mock('expo/virtual/env', () => ({ env: process.env }))` before all other mocks. Using `process.env` (not a literal object) means `jest.isolateModules` + setting `process.env.EXPO_PUBLIC_*` before re-requiring the module controls what value the module captures on load.
+
+**socialLogic multi-table pattern**: functions like `getLikes`, `getComments`, and `addComment` call `supabase.from()` 2–3 times with different table names. These tests use `mockFrom.mockReturnValueOnce(chain1).mockReturnValueOnce(chain2)` rather than a shared `mockReturnValue`, so each `from()` call gets an independent chain with its own result.
+
+AsyncStorage is mocked via `@react-native-async-storage/async-storage/jest/async-storage-mock` in all tests that need it.
 
 ## Docker
 

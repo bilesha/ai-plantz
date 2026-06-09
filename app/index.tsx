@@ -200,6 +200,7 @@ export default function Index() {
       <View style={s.inputWrapper}>
         <View style={s.inputCard}>
           <TextInput
+            testID="plant-search-input"
             placeholder="Search a plant..."
             style={s.input}
             value={plant}
@@ -227,6 +228,7 @@ export default function Index() {
       </View>
 
       <TouchableOpacity
+        testID="potd-card"
         style={s.potdCard}
         onPress={() => router.push({
           pathname: '/screens/PlantDetailsAiGenerated',
@@ -241,6 +243,7 @@ export default function Index() {
 
       <View style={s.buttonRow}>
         <TouchableOpacity
+          testID="get-tips-button"
           style={[s.btnMain, (!plant || loading) && s.btnDisabled]}
           onPress={() => handleGetTips()}
           disabled={!plant || loading}
@@ -252,6 +255,7 @@ export default function Index() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="random-plant-button"
           style={[s.btnRandom, loading && s.btnRandomDisabled]}
           disabled={loading}
           onPress={() => {

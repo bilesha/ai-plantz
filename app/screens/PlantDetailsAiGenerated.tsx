@@ -1,10 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import * as Notifications from "expo-notifications";
-import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../constants/theme";
 import { supabase } from "../../lib/supabase";
 import PlantSocialSection from "../../components/PlantSocialSection";
@@ -13,11 +12,15 @@ import { fetchPlantImage } from "../../utilities/fetchPlantImage";
 import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
-import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, uploadPlantPhoto } from "../../logic/collectionLogic";
+import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry } from "../../logic/collectionLogic";
+import PlantPhotoGallery from "../../components/PlantPhotoGallery";
+import { addDeathEntry } from "../../logic/deathLogLogic";
 import { useToast } from "../../context/ToastContext";
 import HealthLogSection from "../../components/HealthLogSection";
+import SeasonalAdviceSection from "../../components/SeasonalAdviceSection";
 import WateringSection from "../../components/WateringSection";
 import type { CollectionEntry, OwnershipStatus, PlantDetails } from "../../types";
+import { createListing, deleteListing, getMyListingForPlant, type PlantListing } from "../../logic/listingLogic";
 
 const REMINDER_OPTIONS = [
   { days: 3,  label: '3 days' },
@@ -99,8 +102,17 @@ export default function PlantDetailsAiGenerated() {
   const [draftRating, setDraftRating] = useState<number | undefined>(undefined);
   const [draftNotes, setDraftNotes] = useState('');
   const [aiProvider, setAiProvider] = useState<string>('gemini');
-  const [photoUploading, setPhotoUploading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [existingListing, setExistingListing] = useState<PlantListing | null>(null);
+  const [showListingModal, setShowListingModal] = useState(false);
+  const [listingType, setListingType] = useState<'trade' | 'gift' | 'sell'>('trade');
+  const [listingDescription, setListingDescription] = useState('');
+  const [listingPrice, setListingPrice] = useState('');
+  const [listingSubmitting, setListingSubmitting] = useState(false);
+  const [showDeadModal, setShowDeadModal] = useState(false);
+  const [deadCause, setDeadCause] = useState('');
+  const [deadNotes, setDeadNotes] = useState('');
+  const [markingDead, setMarkingDead] = useState(false);
 
   const fetchDetails = async (name: string) => {
     setLoading(true);
@@ -163,6 +175,12 @@ export default function PlantDetailsAiGenerated() {
     } catch {}
   };
 
+  const loadListing = async (name: string) => {
+    try {
+      setExistingListing(await getMyListingForPlant(name));
+    } catch {}
+  };
+
 
   const handleShare = async () => {
     if (!details || !safePlantName) return;
@@ -213,46 +231,29 @@ export default function PlantDetailsAiGenerated() {
     setShowEditSection(false);
   };
 
+  const handleMarkAsDead = async () => {
+    if (!safePlantName) return;
+    setMarkingDead(true);
+    try {
+      await addDeathEntry(safePlantName, deadCause || undefined, deadNotes || undefined, collectionEntry?.addedAt);
+      await removeFromCollection(safePlantName);
+      setCollectionEntry(null);
+      setShowEditSection(false);
+      setShowDeadModal(false);
+      setDeadCause('');
+      setDeadNotes('');
+      showToast(`RIP 🌿 ${safePlantName} — added to your death log`, 'info');
+    } finally {
+      setMarkingDead(false);
+    }
+  };
+
   const openEditSection = () => {
     if (!collectionEntry) return;
     setDraftStatus(collectionEntry.status);
     setDraftRating(collectionEntry.rating);
     setDraftNotes(collectionEntry.notes ?? '');
     setShowEditSection(true);
-  };
-
-  const handlePickPhoto = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Allow photo library access to add a plant photo.');
-        return;
-      }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'] as any,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    console.log('[handlePickPhoto] launchImageLibraryAsync result:', result);
-    if (result.canceled || !result.assets?.[0]) {
-      console.log('[handlePickPhoto] picker cancelled');
-      return;
-    }
-    setPhotoUploading(true);
-    try {
-      console.log('[handlePickPhoto] starting upload, uri:', result.assets[0].uri);
-      const url = await uploadPlantPhoto(safePlantName!, result.assets[0].uri);
-      console.log('[handlePickPhoto] upload returned url:', url);
-      setCollectionEntry(prev => prev ? { ...prev, photo_url: url } : null);
-      showToast('Photo uploaded!', 'success');
-    } catch (e: any) {
-      console.log('[handlePickPhoto] error:', e);
-      showToast('Upload failed', 'error');
-    } finally {
-      setPhotoUploading(false);
-    }
   };
 
   const confirmSetReminder = async (days: number) => {
@@ -298,6 +299,7 @@ export default function PlantDetailsAiGenerated() {
       loadImage(safePlantName);
       loadReminder(safePlantName);
       loadCollectionEntry(safePlantName);
+      loadListing(safePlantName);
     }
   }, [safePlantName]);
 
@@ -320,6 +322,7 @@ export default function PlantDetailsAiGenerated() {
   }
 
   return (
+    <>
     <ScrollView style={d.container} contentContainerStyle={d.content}>
       <View style={d.topBar}>
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
@@ -341,21 +344,11 @@ export default function PlantDetailsAiGenerated() {
       <Text style={d.headerTitle}>{safePlantName}</Text>
       <View style={d.divider} />
 
-      
-      {inCollection && (
-        <View style={d.photoSection}>
-          {collectionEntry?.photo_url ? (
-            <Image source={{ uri: collectionEntry.photo_url }} style={d.photoFull} resizeMode="cover" />
-          ) : null}
-          <TouchableOpacity style={d.photoBtn} onPress={handlePickPhoto} disabled={photoUploading}>
-            {photoUploading ? (
-              <ActivityIndicator size="small" color={theme.accent} />
-            ) : (
-              <Text style={d.photoBtnText}>{collectionEntry?.photo_url ? 'Change photo' : '+ Add photo'}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      <PlantPhotoGallery
+        plantName={safePlantName}
+        isOwner={inCollection && !!currentUserId}
+        userId={currentUserId ?? undefined}
+      />
 
       {error ? (
         <View style={d.errorContainer}>
@@ -501,6 +494,39 @@ export default function PlantDetailsAiGenerated() {
             </View>
           )}
 
+          {inCollection && (
+            existingListing ? (
+              <TouchableOpacity
+                style={d.listingRemoveBtn}
+                onPress={async () => {
+                  await deleteListing(existingListing.id);
+                  setExistingListing(null);
+                  showToast('Listing removed', 'success');
+                }}
+              >
+                <Text style={d.listingRemoveBtnText}>✕ Remove listing</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={d.listingBtn}
+                onPress={() => {
+                  setListingType('trade');
+                  setListingDescription('');
+                  setListingPrice('');
+                  setShowListingModal(true);
+                }}
+              >
+                <Text style={d.listingBtnText}>🏷️ List for trade / gift / sale</Text>
+              </TouchableOpacity>
+            )
+          )}
+
+          {inCollection && collectionEntry?.status === 'own' && currentUserId && (
+            <TouchableOpacity style={d.deathBtn} onPress={() => setShowDeadModal(true)}>
+              <Text style={d.deathBtnText}>☠️ Mark as dead</Text>
+            </TouchableOpacity>
+          )}
+
           {Platform.OS !== 'web' && (
             <View style={d.reminderSection}>
               {!showPicker && !activeReminder && (
@@ -552,11 +578,159 @@ export default function PlantDetailsAiGenerated() {
             </View>
           )}
 
+          <SeasonalAdviceSection plantDetails={details} />
           <WateringSection plantName={safePlantName} isOwner={!!currentUserId} />
           <HealthLogSection plantName={safePlantName} isOwner={!!currentUserId} />
         </View>
       )}
     </ScrollView>
+
+    <Modal
+      visible={showListingModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowListingModal(false)}
+    >
+      <View testID="listing-modal" style={d.modalOverlay}>
+        <View style={d.modalBox}>
+          <Text style={d.modalTitle}>List this plant</Text>
+
+          <View style={d.listingTypeRow}>
+            {([
+              { type: 'trade' as const, label: '🔄 Trade' },
+              { type: 'gift'  as const, label: '🎁 Gift'  },
+              { type: 'sell'  as const, label: '💰 Sell'  },
+            ] as const).map(opt => (
+              <TouchableOpacity
+                key={opt.type}
+                style={[d.listingTypePill, listingType === opt.type && d.listingTypePillActive]}
+                onPress={() => setListingType(opt.type)}
+              >
+                <Text style={[d.listingTypePillText, listingType === opt.type && d.listingTypePillTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {listingType === 'sell' && (
+            <>
+              <Text style={d.modalLabel}>PRICE ($)</Text>
+              <TextInput
+                style={d.modalInput}
+                value={listingPrice}
+                onChangeText={setListingPrice}
+                placeholder="0.00"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="decimal-pad"
+              />
+            </>
+          )}
+
+          <Text style={d.modalLabel}>DESCRIPTION (optional)</Text>
+          <TextInput
+            style={[d.modalInput, d.modalInputMultiline]}
+            value={listingDescription}
+            onChangeText={v => setListingDescription(v.slice(0, 200))}
+            placeholder="Cutting, pot size, health notes..."
+            placeholderTextColor={theme.textMuted}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            maxLength={200}
+          />
+
+          <TouchableOpacity
+            style={[d.collectionBtnSaved, listingSubmitting && { opacity: 0.6 }]}
+            disabled={listingSubmitting}
+            onPress={async () => {
+              setListingSubmitting(true);
+              try {
+                const parsedPrice = parseFloat(listingPrice);
+                const result = await createListing(
+                  safePlantName!,
+                  listingType,
+                  listingDescription || undefined,
+                  listingType === 'sell' && !isNaN(parsedPrice) ? parsedPrice : undefined,
+                );
+                if (result) {
+                  setExistingListing(result);
+                  setShowListingModal(false);
+                  showToast('Listing created!', 'success');
+                } else {
+                  showToast('Failed to create listing', 'error');
+                }
+              } finally {
+                setListingSubmitting(false);
+              }
+            }}
+          >
+            {listingSubmitting
+              ? <ActivityIndicator size="small" color={theme.accentDark} />
+              : <Text style={d.collectionBtnSavedText}>Create listing</Text>
+            }
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setShowListingModal(false)} style={d.dismissLink}>
+            <Text style={d.dismissLinkText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    <Modal
+      testID="mark-as-dead-modal"
+      visible={showDeadModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowDeadModal(false)}
+    >
+      <View style={d.modalOverlay}>
+        <View style={d.modalBox}>
+          <Text style={d.deadModalTitle}>Mark as Dead ☠️</Text>
+
+          <Text style={d.modalLabel}>WHAT WENT WRONG? (optional)</Text>
+          <TextInput
+            style={d.modalInput}
+            value={deadCause}
+            onChangeText={t => setDeadCause(t.slice(0, 100))}
+            placeholder="e.g. overwatering, root rot, pests..."
+            placeholderTextColor={theme.textMuted}
+            maxLength={100}
+          />
+
+          <Text style={d.modalLabel}>ANY REFLECTIONS? (optional)</Text>
+          <TextInput
+            style={[d.modalInput, d.modalInputMultiline]}
+            value={deadNotes}
+            onChangeText={t => setDeadNotes(t.slice(0, 300))}
+            placeholder="Notes for next time..."
+            placeholderTextColor={theme.textMuted}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            maxLength={300}
+          />
+
+          <TouchableOpacity
+            style={[d.deathConfirmBtn, markingDead && { opacity: 0.6 }]}
+            onPress={handleMarkAsDead}
+            disabled={markingDead}
+          >
+            {markingDead
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={d.deathConfirmBtnText}>Mark as dead</Text>
+            }
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setShowDeadModal(false); setDeadCause(''); setDeadNotes(''); }}
+            style={d.dismissLink}
+          >
+            <Text style={d.dismissLinkText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -626,10 +800,27 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   clearRatingText:  { fontSize: 12, color: t.textMuted },
   notesInput:       { backgroundColor: t.background, borderWidth: 1, borderColor: t.border, borderRadius: 12, padding: 12, fontSize: 15, color: t.textPrimary, minHeight: 80, marginBottom: 16 },
   removeLinkText:   { color: t.danger, fontSize: 13, fontWeight: '600' as const, textAlign: 'center' as const, paddingVertical: 4 },
-  // photo section
-  photoSection:  { marginBottom: 20 },
-  photoFull:     { width: '100%', height: 220, borderRadius: 16, marginBottom: 10 },
-  photoBtn:      { alignSelf: 'center' as const, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surface, minWidth: 120, alignItems: 'center' as const },
-  photoBtnText:  { color: t.accent, fontWeight: '700' as const, fontSize: 14 },
-  // save feedback banner
+  // listing
+  listingBtn:               { borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surface, padding: 14, borderRadius: 20, alignItems: 'center' as const, marginBottom: 12 },
+  listingBtnText:           { color: t.accent, fontWeight: '700' as const, fontSize: 14 },
+  listingRemoveBtn:         { alignItems: 'center' as const, paddingVertical: 10, marginBottom: 12 },
+  listingRemoveBtnText:     { color: t.danger, fontSize: 14, fontWeight: '600' as const },
+  listingTypeRow:           { flexDirection: 'row' as const, gap: 8, marginBottom: 16 },
+  listingTypePill:          { flex: 1, alignItems: 'center' as const, paddingVertical: 10, borderRadius: 100, borderWidth: 1.5, borderColor: t.border, backgroundColor: t.surface },
+  listingTypePillActive:    { borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },
+  listingTypePillText:      { fontSize: 13, fontWeight: '700' as const, color: t.textSecondary },
+  listingTypePillTextActive:{ color: t.accentDark },
+  // listing modal
+  modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center' as const, alignItems: 'center' as const, padding: 24 },
+  modalBox:            { backgroundColor: t.surface, borderRadius: 24, padding: 24, width: '100%' },
+  modalTitle:          { fontSize: 18, fontWeight: '800' as const, color: t.textTitle, marginBottom: 20 },
+  modalLabel:          { fontSize: 12, fontWeight: '700' as const, color: t.textMuted, letterSpacing: 0.8, marginBottom: 6, marginTop: 12 },
+  modalInput:          { backgroundColor: t.background, borderWidth: 1.5, borderColor: t.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: t.textPrimary },
+  modalInputMultiline: { minHeight: 80, textAlignVertical: 'top' as const, marginBottom: 4 },
+  // mark-as-dead
+  deathBtn:          { alignItems: 'center' as const, paddingVertical: 10, marginBottom: 8 },
+  deathBtnText:      { color: t.danger, fontSize: 13, fontWeight: '600' as const },
+  deadModalTitle:    { fontSize: 18, fontWeight: '800' as const, color: t.danger, marginBottom: 20 },
+  deathConfirmBtn:   { backgroundColor: t.danger, padding: 14, borderRadius: 16, alignItems: 'center' as const, marginTop: 16 },
+  deathConfirmBtnText: { color: '#fff', fontWeight: '700' as const, fontSize: 15 },
 });

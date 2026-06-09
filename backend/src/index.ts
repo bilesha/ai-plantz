@@ -7,10 +7,34 @@ import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
-if (!process.env.GEMINI_API_KEY) {
+const MOCK_MODE = process.env.MOCK_MODE === "true";
+
+if (MOCK_MODE) {
+  console.log("[mock] Mock mode enabled — AI calls disabled");
+} else if (!process.env.GEMINI_API_KEY) {
   console.error("FATAL: GEMINI_API_KEY environment variable is required");
   process.exit(1);
 }
+
+const MOCK_RESPONSE = {
+  summary:
+    "Mock Plant is a hardy, low-maintenance plant perfect for beginners. It thrives in a variety of conditions and requires minimal care.",
+  details: {
+    watering: "Water once a week, allowing soil to dry out between waterings.",
+    light: "Tolerates low to bright indirect light.",
+    fertilizer: "Feed monthly during growing season with a balanced liquid fertilizer.",
+    careLevel: "easy",
+    funFact:
+      "Mock Plant is used in automated tests to ensure the app works correctly without hitting real AI providers.",
+    toxicity: "Non-toxic to humans and pets.",
+    seasonalCare: "Reduce watering in winter. Resume normal schedule in spring.",
+    compatibility: "Gets along well with all other plants.",
+    pairingPlants: "Pairs well with Test Fern and Dummy Succulent.",
+    propagation: "Propagate by division in spring.",
+    troubleshooting:
+      "If leaves turn yellow, reduce watering. If growth is slow, increase light.",
+  },
+};
 
 const app = express();
 
@@ -173,7 +197,14 @@ async function fetchFromOpenAICompatible(
 
 // --- Plant tips endpoint ---
 
-app.post("/api/plant-tips", plantTipsLimiter, async (req, res) => {
+app.post(
+  "/api/plant-tips",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
   const { plantName, aiProvider = "gemini" } = req.body;
 
   if (!plantName || typeof plantName !== "string" || plantName.trim().length === 0) {

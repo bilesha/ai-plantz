@@ -31,7 +31,8 @@
       "Bash(npx supabase *)",
       "Bash(PGPASSWORD=\"3T6TQfxXMGSdgwJF\" psql *)",
       "Bash(node *)",
-      "Bash(curl -s \"http://localhost:8082\")"
+      "Bash(curl -s \"http://localhost:8082\")",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

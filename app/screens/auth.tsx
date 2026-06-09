@@ -24,6 +24,7 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +35,24 @@ export default function AuthScreen() {
     if (!email.trim() || !password) {
       setError('Please fill in all fields.');
       return;
+    }
+    if (!isLogin) {
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters.');
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        setError('Password must contain at least one capital letter.');
+        return;
+      }
+      if (!/[0-9]/.test(password)) {
+        setError('Password must contain at least one number.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -58,6 +77,7 @@ export default function AuthScreen() {
 
   const toggleMode = () => {
     setMode(m => (m === 'login' ? 'signup' : 'login'));
+    setConfirmPassword('');
     setError(null);
   };
 
@@ -82,6 +102,7 @@ export default function AuthScreen() {
             <Text style={[s.toggleText, isLogin && s.toggleTextActive]}>Log in</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            testID="auth-signup-tab"
             style={[s.toggleBtn, !isLogin && s.toggleBtnActive]}
             onPress={() => { setMode('signup'); setError(null); }}
           >
@@ -92,6 +113,7 @@ export default function AuthScreen() {
         <View style={s.card}>
           <Text style={s.fieldLabel}>EMAIL</Text>
           <TextInput
+            testID="auth-email-input"
             style={s.input}
             placeholder="you@example.com"
             placeholderTextColor={theme.textMuted}
@@ -107,16 +129,36 @@ export default function AuthScreen() {
 
           <Text style={s.fieldLabel}>PASSWORD</Text>
           <TextInput
+            testID="auth-password-input"
             style={s.input}
-            placeholder={isLogin ? 'Enter your password' : 'At least 6 characters'}
+            placeholder={isLogin ? 'Enter your password' : 'Min 6 chars, 1 capital, 1 number'}
             placeholderTextColor={theme.textMuted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             autoComplete={isLogin ? 'current-password' : 'new-password'}
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
+            returnKeyType={isLogin ? 'done' : 'next'}
+            onSubmitEditing={isLogin ? handleSubmit : undefined}
           />
+
+          {!isLogin && (
+            <>
+              <View style={s.divider} />
+              <Text style={s.fieldLabel}>CONFIRM PASSWORD</Text>
+              <TextInput
+                testID="auth-confirm-password-input"
+                style={s.input}
+                placeholder="Re-enter your password"
+                placeholderTextColor={theme.textMuted}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoComplete="new-password"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+              />
+            </>
+          )}
         </View>
 
         {error && (
@@ -126,6 +168,7 @@ export default function AuthScreen() {
         )}
 
         <TouchableOpacity
+          testID={isLogin ? 'auth-login-button' : 'auth-signup-button'}
           style={[s.primaryBtn, loading && s.primaryBtnDisabled]}
           onPress={handleSubmit}
           disabled={loading}

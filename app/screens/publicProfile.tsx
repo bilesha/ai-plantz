@@ -15,6 +15,7 @@ import {
 import { useTheme, type Theme } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { getPublicCollection } from '../../logic/collectionLogic';
+import { getListingsForUser, type PlantListing } from '../../logic/listingLogic';
 import {
   followUser,
   unfollowUser,
@@ -45,6 +46,12 @@ const STATUS_COLORS: Record<OwnershipStatus, string> = {
   tried: '#64748b',
 };
 
+function listingLabel(listing: PlantListing): string {
+  if (listing.listing_type === 'sell') return `💰 $${listing.price?.toFixed(2) ?? '?'}`;
+  if (listing.listing_type === 'gift') return '🎁 Gift';
+  return '🔄 Trade';
+}
+
 function getInitials(str: string): string {
   const parts = str.trim().split(/[\s._@]+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -71,6 +78,7 @@ export default function PublicProfileScreen() {
   const [followLoading, setFollowLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [likesMap, setLikesMap] = useState<Record<string, PlantLikeInfo>>({});
+  const [listings, setListings] = useState<PlantListing[]>([]);
 
   useEffect(() => {
     if (!safeUserId) { setError('No user specified.'); setLoading(false); return; }
@@ -85,6 +93,7 @@ export default function PublicProfileScreen() {
           followerCountVal,
           followingCountVal,
           { data: { session } },
+          listingsData,
         ] = await Promise.all([
           supabase
             .from('profiles')
@@ -95,11 +104,13 @@ export default function PublicProfileScreen() {
           getFollowerCount(safeUserId),
           getFollowingCount(safeUserId),
           sessionPromise,
+          getListingsForUser(safeUserId),
         ]);
 
         if (profileRes.error) throw profileRes.error;
         setProfile(profileRes.data ?? { username: null, bio: null, avatar_url: null });
         setCollection(collectionData);
+        setListings(listingsData);
         setFollowerCount(followerCountVal);
         setFollowingCount(followingCountVal);
 
@@ -233,6 +244,27 @@ export default function PublicProfileScreen() {
         )}
       </View>
 
+      {listings.length > 0 && (
+        <>
+          <Text style={s.sectionLabel}>AVAILABLE</Text>
+          <View style={[s.card, s.availableCard]}>
+            {listings.map((listing, i) => (
+              <View key={listing.id} style={[s.row, i < listings.length - 1 && s.rowBorder]}>
+                <View style={s.listingLeft}>
+                  <Text style={s.plantName}>{listing.plant_name}</Text>
+                  {listing.description ? (
+                    <Text style={s.listingDesc} numberOfLines={2}>{listing.description}</Text>
+                  ) : null}
+                </View>
+                <View style={s.listingTypePill}>
+                  <Text style={s.listingTypePillText}>{listingLabel(listing)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
       <Text style={s.sectionLabel}>COLLECTION</Text>
 
       {collection.length === 0 ? (
@@ -332,4 +364,9 @@ const styles = (t: Theme) => StyleSheet.create({
   emptyCard:         { backgroundColor: t.surface, borderRadius: 20, padding: 24, alignItems: 'center' },
   emptyText:         { color: t.textMuted, fontSize: 15 },
   errorText:         { fontSize: 16, color: t.textSecondary, textAlign: 'center', marginBottom: 8 },
+  availableCard:     { marginBottom: 20 },
+  listingLeft:       { flex: 1 },
+  listingDesc:       { fontSize: 12, color: t.textMuted, marginTop: 2 },
+  listingTypePill:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: t.surfaceGreen },
+  listingTypePillText: { fontSize: 12, fontWeight: '700' as const, color: t.accentDark },
 });

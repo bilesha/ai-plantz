@@ -28,6 +28,16 @@ export type HealthLogEntry = {
   logged_at: string;
 };
 
+export type HealthLogComment = {
+  id: string;
+  user_id: string;
+  health_log_id: string;
+  body: string;
+  created_at: string;
+  username: string | null;
+  avatar_url: string | null;
+};
+
 export type CollectionEntry = {
   name: string;
   summary: string;

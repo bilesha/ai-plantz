@@ -11,7 +11,7 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/theme';
 import { useThemePreference, type ThemePreference } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
@@ -20,6 +20,7 @@ import { getCollection } from '../../logic/collectionLogic';
 import { getAllHealthLogs } from '../../logic/healthLogLogic';
 import { cancelWateringReminder, WateringReminder } from '../../logic/reminderLogic';
 import { getWateringLog } from '../../logic/wateringLogic';
+import { requestAndSaveLocation } from '../../logic/locationLogic';
 
 type ReminderEntry = {
   plantName: string;
@@ -71,6 +72,10 @@ export default function SettingsScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+  const [locationUpdatedAt, setLocationUpdatedAt] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const loadReminders = async () => {
@@ -91,7 +96,9 @@ export default function SettingsScreen() {
   };
 
   const loadAiProvider = async () => {
-    const stored = await AsyncStorage.getItem('ai_provider');
+    let stored: string | null = null;
+    if (Platform.OS === 'web') stored = localStorage.getItem('ai_provider');
+    if (!stored) stored = await AsyncStorage.getItem('ai_provider');
     if (AI_PROVIDERS.some(p => p.id === stored)) setAiProvider(stored as AiProvider);
   };
 
@@ -102,11 +109,12 @@ export default function SettingsScreen() {
       setProfileEmail(user.email ?? '');
       const { data } = await supabase
         .from('profiles')
-        .select('username, avatar_url')
+        .select('username, avatar_url, location_updated_at')
         .eq('id', user.id)
         .maybeSingle();
-      setProfileUsername(data?.username ?? null);
-      setProfileAvatarUrl(data?.avatar_url ?? null);
+      setProfileUsername((data as any)?.username ?? null);
+      setProfileAvatarUrl((data as any)?.avatar_url ?? null);
+      setLocationUpdatedAt((data as any)?.location_updated_at ?? null);
       setAvatarError(false);
     } catch {}
   };
@@ -121,6 +129,13 @@ export default function SettingsScreen() {
   const handleSelectProvider = async (provider: AiProvider) => {
     setAiProvider(provider);
     await AsyncStorage.setItem('ai_provider', provider);
+    if (Platform.OS === 'web') localStorage.setItem('ai_provider', provider);
+  };
+
+  const showConfirm = (message: string, action: () => void) => {
+    setConfirmMessage(message);
+    setConfirmAction(() => action);
+    setConfirmVisible(true);
   };
 
   useFocusEffect(useCallback(() => {
@@ -221,25 +236,27 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleDeleteConfirmed = async () => {
+    await supabase.rpc('delete_user');
+    await performLogout();
+  };
+
   const handleDeleteAccount = () => {
-    const doDelete = async () => {
-      await supabase.rpc('delete_user');
-      await performLogout();
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('This will permanently delete your account and all data. This cannot be undone.')) {
-        doDelete();
+    showConfirm('This will permanently delete your account and all data. This cannot be undone.', handleDeleteConfirmed);
+  };
+
+  const handleUpdateLocation = async () => {
+    try {
+      const loc = await requestAndSaveLocation();
+      if (loc) {
+        setLocationUpdatedAt(new Date().toISOString());
+        showToast('Location saved — seasonal tips will be personalised', 'success');
+      } else {
+        showToast('Location permission denied', 'error');
       }
-      return;
+    } catch {
+      showToast('Could not get location', 'error');
     }
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete Account', style: 'destructive', onPress: () => doDelete() },
-      ],
-    );
   };
 
   const handleCancelReminder = async (plantName: string) => {
@@ -255,47 +272,22 @@ export default function SettingsScreen() {
     await supabase.auth.signOut();
   };
 
+  const handleLogoutConfirmed = () => performLogout();
+
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to log out?')) {
-        performLogout();
-      }
-      return;
-    }
-    Alert.alert(
-      'Log out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => performLogout() },
-      ],
-    );
+    showConfirm('Are you sure you want to log out?', handleLogoutConfirmed);
   };
 
-  const handleClearAllData = async () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('This will permanently delete your search history, cached tips, favourites, and all watering reminders.')) {
-        await AsyncStorage.clear();
-        setReminders([]);
-      }
-      return;
+  const handleClearAllDataConfirmed = async () => {
+    if (Platform.OS !== 'web') {
+      await Notifications.cancelAllScheduledNotificationsAsync();
     }
-    Alert.alert(
-      'Clear all data',
-      'This will permanently delete your search history, cached tips, favourites, and all watering reminders.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear everything',
-          style: 'destructive',
-          onPress: async () => {
-            await Notifications.cancelAllScheduledNotificationsAsync();
-            await AsyncStorage.clear();
-            setReminders([]);
-          },
-        },
-      ]
-    );
+    await AsyncStorage.clear();
+    setReminders([]);
+  };
+
+  const handleClearAllData = () => {
+    showConfirm('This will clear all local data including your plant history and cache.', handleClearAllDataConfirmed);
   };
 
   const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -373,6 +365,7 @@ export default function SettingsScreen() {
         {AI_PROVIDERS.map(({ id, label }, i) => (
           <TouchableOpacity
             key={id}
+            testID={`settings-ai-provider-${id}`}
             style={[s.row, i < AI_PROVIDERS.length - 1 && s.rowBorder]}
             onPress={() => handleSelectProvider(id)}
           >
@@ -382,6 +375,27 @@ export default function SettingsScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      <Text style={s.sectionLabel}>LOCATION</Text>
+      <View style={s.section}>
+        <TouchableOpacity
+          testID="settings-location-row"
+          style={s.row}
+          onPress={handleUpdateLocation}
+        >
+          <View style={s.rowInfo}>
+            <Text style={s.rowTitle}>
+              {locationUpdatedAt ? '📍 Location saved ✓' : '📍 Update location'}
+            </Text>
+            {locationUpdatedAt ? (
+              <Text style={s.rowSub}>
+                Updated {new Date(locationUpdatedAt).toLocaleDateString()}
+              </Text>
+            ) : null}
+          </View>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={s.sectionLabel}>ACCOUNT</Text>
@@ -394,16 +408,17 @@ export default function SettingsScreen() {
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          testID="settings-change-password"
           style={[s.row, s.rowBorder]}
           onPress={() => setChangePasswordVisible(true)}
         >
           <Text style={s.rowTitle}>Change Password</Text>
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.dangerRow, s.rowBorder]} onPress={handleLogout}>
+        <TouchableOpacity testID="settings-logout" style={[s.dangerRow, s.rowBorder]} onPress={handleLogout}>
           <Text style={s.dangerText}>Log out</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.dangerRow} onPress={handleDeleteAccount}>
+        <TouchableOpacity testID="settings-delete-account" style={s.dangerRow} onPress={handleDeleteAccount}>
           <Text style={s.dangerText}>Delete Account</Text>
         </TouchableOpacity>
       </View>
@@ -423,8 +438,12 @@ export default function SettingsScreen() {
             )}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.row, s.rowBorder]} onPress={handleExportCsv}>
+        <TouchableOpacity testID="settings-export-csv" style={[s.row, s.rowBorder]} onPress={handleExportCsv}>
           <Text style={s.rowTitle}>Export Collection</Text>
+          <Text style={s.chevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.row, s.rowBorder]} onPress={() => router.push('/screens/deathLog')}>
+          <Text style={s.rowTitle}>☠️ Death Log</Text>
           <Text style={s.chevron}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.dangerRow} onPress={handleClearAllData}>
@@ -492,6 +511,33 @@ export default function SettingsScreen() {
         </View>
       </View>
     </Modal>
+
+    <Modal
+      visible={confirmVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { setConfirmVisible(false); setConfirmAction(null); }}
+    >
+      <View style={s.modalOverlay}>
+        <View style={s.modalBox}>
+          <Text style={s.modalTitle}>{confirmMessage}</Text>
+          <TouchableOpacity
+            testID="confirm-modal-confirm"
+            style={s.modalDangerBtn}
+            onPress={() => { confirmAction?.(); setConfirmVisible(false); setConfirmAction(null); }}
+          >
+            <Text style={s.modalSaveBtnText}>Confirm</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="confirm-modal-cancel"
+            onPress={() => { setConfirmVisible(false); setConfirmAction(null); }}
+            style={s.modalCancelBtn}
+          >
+            <Text style={s.modalCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
     </>
   );
 }
@@ -539,6 +585,7 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   modalLabel:      { fontSize: 12, fontWeight: '700', color: t.textMuted, letterSpacing: 0.8, marginBottom: 6, marginTop: 12 },
   modalInput:      { backgroundColor: t.background, borderWidth: 1.5, borderColor: t.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: t.textPrimary },
   modalSaveBtn:    { backgroundColor: t.accent, padding: 14, borderRadius: 16, alignItems: 'center' as const, marginTop: 20 },
+  modalDangerBtn:  { backgroundColor: t.danger, padding: 14, borderRadius: 16, alignItems: 'center' as const, marginTop: 20 },
   modalSaveBtnText:{ color: '#fff', fontWeight: '700', fontSize: 15 },
   modalCancelBtn:  { alignItems: 'center' as const, paddingVertical: 12 },
   modalCancelText: { color: t.textMuted, fontSize: 14, fontWeight: '600' },

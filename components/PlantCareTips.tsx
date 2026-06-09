@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Animated, StyleSheet, Text } from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../constants/theme";
 
 type Props = {
@@ -38,10 +38,12 @@ export default function PlantCareTips({ summary, loading, error }: Props) {
   if (!summary) return null;
 
   return (
-    <Animated.View style={[s.summaryBox, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      <Text style={s.label}>AI Summary</Text>
-      <Text style={s.summaryText}>"{summary}"</Text>
-    </Animated.View>
+    <View testID="plant-summary">
+      <Animated.View style={[s.summaryBox, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <Text style={s.label}>AI Summary</Text>
+        <Text style={s.summaryText}>"{summary}"</Text>
+      </Animated.View>
+    </View>
   );
 }
 

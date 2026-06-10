@@ -27,9 +27,10 @@ type Props = {
   plantName: string;
   isOwner: boolean;
   userId?: string;
+  onPhotoUploaded?: () => void;
 };
 
-export default function PlantPhotoGallery({ plantName, isOwner, userId }: Props) {
+export default function PlantPhotoGallery({ plantName, isOwner, userId, onPhotoUploaded }: Props) {
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
   const { showToast } = useToast();
@@ -86,6 +87,7 @@ export default function PlantPhotoGallery({ plantName, isOwner, userId }: Props)
             : [...prev, photo],
         );
         showToast('Photo added!', 'success');
+        onPhotoUploaded?.();
       } else {
         showToast('Upload failed', 'error');
       }

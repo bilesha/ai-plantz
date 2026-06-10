@@ -461,6 +461,34 @@ export default function DiscoverScreen() {
             </View>
           )}
 
+          <TouchableOpacity
+            testID="compare-plants-card"
+            style={s.compareCard}
+            onPress={() => router.push('/screens/compare')}
+            activeOpacity={0.8}
+          >
+            <Text style={s.compareCardIcon}>⚖️</Text>
+            <View style={s.compareCardText}>
+              <Text style={s.compareCardTitle}>Compare Plants</Text>
+              <Text style={s.compareCardSub}>Side-by-side AI care comparison</Text>
+            </View>
+            <Text style={s.compareCardChevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="leaderboard-card"
+            style={s.compareCard}
+            onPress={() => router.push('/screens/leaderboard')}
+            activeOpacity={0.8}
+          >
+            <Text style={s.compareCardIcon}>🏆</Text>
+            <View style={s.compareCardText}>
+              <Text style={s.compareCardTitle}>Leaderboard</Text>
+              <Text style={s.compareCardSub}>Top plant parents ranked by score</Text>
+            </View>
+            <Text style={s.compareCardChevron}>›</Text>
+          </TouchableOpacity>
+
           {(marketplaceLoading || marketplace.length > 0) && (
             <View testID="marketplace-section" style={s.marketplaceSection}>
               <Text style={s.marketplaceHeading}>MARKETPLACE 🌿</Text>
@@ -710,6 +738,13 @@ const styles = (t: Theme) => StyleSheet.create({
   pillName:         { fontSize: 14, fontWeight: '700', color: t.textPrimary },
   pillCount:        { fontSize: 12, color: t.accent, marginTop: 2, fontWeight: '600' },
   skeletonPill:     { width: 110, height: 52, borderRadius: 24, backgroundColor: t.border, opacity: 0.6 },
+
+  compareCard:        { flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface, borderRadius: 20, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: t.border, gap: 12 },
+  compareCardIcon:    { fontSize: 28 },
+  compareCardText:    { flex: 1 },
+  compareCardTitle:   { fontSize: 16, fontWeight: '800', color: t.textTitle },
+  compareCardSub:     { fontSize: 13, color: t.textMuted, marginTop: 2 },
+  compareCardChevron: { fontSize: 24, color: t.accent, fontWeight: '700' },
 
   marketplaceSection:      { marginBottom: 24 },
   marketplaceHeading:      { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: t.textMuted, marginBottom: 12 },

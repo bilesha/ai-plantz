@@ -12,8 +12,11 @@ import { fetchPlantImage } from "../../utilities/fetchPlantImage";
 import { CardSkeleton } from "../../components/SkeletonLoader";
 import { getPlantDetailsFromCache, savePlantDetailsToCache, getPlantImageFromCache, savePlantImageToCache } from "../../logic/cacheLogic";
 import { scheduleWateringReminder, cancelWateringReminder, getWateringReminder, WateringReminder } from "../../logic/reminderLogic";
-import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry } from "../../logic/collectionLogic";
+import { addToCollection, removeFromCollection, getCollectionEntry, updateCollectionEntry, getCollection } from "../../logic/collectionLogic";
 import PlantPhotoGallery from "../../components/PlantPhotoGallery";
+import PlantDiagnosisButton from "../../components/PlantDiagnosisButton";
+import PlantChatSection from "../../components/PlantChatSection";
+import { recordActivity, checkAndAwardBadges, updateLeaderboard } from "../../logic/gamificationLogic";
 import { addDeathEntry } from "../../logic/deathLogLogic";
 import { useToast } from "../../context/ToastContext";
 import HealthLogSection from "../../components/HealthLogSection";
@@ -114,6 +117,19 @@ export default function PlantDetailsAiGenerated() {
   const [deadNotes, setDeadNotes] = useState('');
   const [markingDead, setMarkingDead] = useState(false);
 
+  const runGamification = async (ctx: {
+    collectionCount?: number;
+    hasPhoto?: boolean;
+    hasDiagnosis?: boolean;
+    hasListing?: boolean;
+  }) => {
+    try {
+      await recordActivity();
+      await checkAndAwardBadges(ctx);
+      updateLeaderboard();
+    } catch {}
+  };
+
   const fetchDetails = async (name: string) => {
     setLoading(true);
     setError(null);
@@ -210,6 +226,7 @@ export default function PlantDetailsAiGenerated() {
       setCollectionEntry(entry);
       setShowAddPicker(false);
       showToast('Plant added to collection!', 'success');
+      getCollection().then(all => runGamification({ collectionCount: all.length })).catch(() => {});
     } else {
       showToast(`Failed: ${result.error ?? 'Unknown error'}`, 'error');
     }
@@ -348,7 +365,19 @@ export default function PlantDetailsAiGenerated() {
         plantName={safePlantName}
         isOwner={inCollection && !!currentUserId}
         userId={currentUserId ?? undefined}
+        onPhotoUploaded={() => runGamification({ hasPhoto: true })}
       />
+
+      {collectionEntry !== null && (
+        <PlantDiagnosisButton
+          plantName={safePlantName}
+          onSuccess={() => runGamification({ hasDiagnosis: true })}
+        />
+      )}
+
+      {collectionEntry !== null && (
+        <PlantChatSection plantName={safePlantName} />
+      )}
 
       {error ? (
         <View style={d.errorContainer}>
@@ -657,6 +686,7 @@ export default function PlantDetailsAiGenerated() {
                   setExistingListing(result);
                   setShowListingModal(false);
                   showToast('Listing created!', 'success');
+                  runGamification({ hasListing: true });
                 } else {
                   showToast('Failed to create listing', 'error');
                 }

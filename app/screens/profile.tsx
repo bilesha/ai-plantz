@@ -20,6 +20,8 @@ import { getCollection, getCollectionStats, type CollectionStats } from '../../l
 import { getDeathLog } from '../../logic/deathLogLogic';
 import { getProfileStats, uploadAvatar, updateBio } from '../../logic/profileLogic';
 import { getUnreadCount } from '../../logic/notificationLogic';
+import StreakBadge from '../../components/StreakBadge';
+import BadgesSection from '../../components/BadgesSection';
 import { useToast } from '../../context/ToastContext';
 import type { CollectionEntry, OwnershipStatus } from '../../types';
 
@@ -216,6 +218,7 @@ export default function ProfileScreen() {
 
           <Text style={s.username}>{profile?.username || 'Plant Lover'}</Text>
           <Text style={s.emailLabel}>{email}</Text>
+          <StreakBadge />
 
           <View style={s.statsRow}>
             <TouchableOpacity
@@ -269,6 +272,8 @@ export default function ProfileScreen() {
               <Text style={[s.collectionStatLabel, { color: '#ef4444' }]}>☠️ Lost</Text>
             </View>
           </View>
+
+          {userId && <BadgesSection userId={userId} />}
 
           <View style={s.bioRow}>
             {profile?.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}

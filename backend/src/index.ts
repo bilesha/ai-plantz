@@ -16,6 +16,19 @@ if (MOCK_MODE) {
   process.exit(1);
 }
 
+const MOCK_DIAGNOSIS_RESPONSE = {
+  healthy: false,
+  issues: ["Yellowing leaves", "Brown leaf tips"],
+  diagnosis:
+    "The plant shows signs of overwatering combined with low humidity. The yellowing is likely caused by root saturation, while brown tips indicate moisture stress from dry air.",
+  recommendations: [
+    "Allow the soil to dry out completely before next watering.",
+    "Increase ambient humidity with a pebble tray or misting.",
+    "Check roots for rot and trim any that are brown and mushy.",
+    "Move to a spot with better air circulation.",
+  ],
+};
+
 const MOCK_RESPONSE = {
   summary:
     "Mock Plant is a hardy, low-maintenance plant perfect for beginners. It thrives in a variety of conditions and requires minimal care.",
@@ -258,6 +271,293 @@ app.post(
     res.status(500).json({ error: "Failed to fetch data from AI service." });
   }
 });
+
+// --- Plant diagnosis endpoint ---
+
+const DIAGNOSIS_PROMPT = (plantName?: string) => `
+You are a plant health expert. Examine the provided image of ${plantName ? `a "${plantName}"` : "a plant"} and identify any visible health problems such as disease, pests, overwatering, underwatering, sunburn, nutrient deficiency, or physical damage.
+
+Respond with a JSON object ONLY — no markdown, no extra text.
+{
+  "healthy": boolean,
+  "issues": string[],
+  "diagnosis": string,
+  "recommendations": string[]
+}
+
+- "healthy": true if the plant looks healthy with no visible problems.
+- "issues": short labels for each problem found (e.g. "Yellowing leaves", "Root rot", "Spider mites"). Empty array if healthy.
+- "diagnosis": 2–4 sentences explaining what is wrong and likely causes.
+- "recommendations": 3–5 actionable steps to treat the problem. Empty array if healthy.
+`;
+
+app.post(
+  "/api/plant-diagnosis",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_DIAGNOSIS_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
+    const { imageBase64, mimeType, plantName } = req.body as {
+      imageBase64?: string;
+      mimeType?: string;
+      plantName?: string;
+    };
+
+    if (!imageBase64 || typeof imageBase64 !== "string" || imageBase64.length === 0) {
+      return res.status(400).json({ error: "imageBase64 is required" });
+    }
+    if (!mimeType || typeof mimeType !== "string") {
+      return res.status(400).json({ error: "mimeType is required" });
+    }
+
+    try {
+      const result = await withTimeout(
+        geminiModel.generateContent([
+          { inlineData: { data: imageBase64, mimeType } },
+          { text: DIAGNOSIS_PROMPT(plantName?.trim()) },
+        ]),
+        20_000,
+        "Gemini diagnosis"
+      );
+
+      let responseText = result.response.text().replace(/```json/gi, "").replace(/```/g, "").trim();
+
+      let parsedResponse: unknown;
+      try {
+        parsedResponse = JSON.parse(responseText);
+      } catch {
+        console.error("Gemini diagnosis returned unparseable JSON:", responseText);
+        return res.status(502).json({ error: "AI service returned an invalid response" });
+      }
+
+      const r = parsedResponse as Record<string, unknown>;
+      if (
+        typeof r.healthy !== "boolean" ||
+        !Array.isArray(r.issues) ||
+        typeof r.diagnosis !== "string" ||
+        !Array.isArray(r.recommendations)
+      ) {
+        console.error("Gemini diagnosis response missing expected fields:", parsedResponse);
+        return res.status(502).json({ error: "AI service returned an unexpected response shape" });
+      }
+
+      res.json(parsedResponse);
+    } catch (error) {
+      console.error("Gemini diagnosis error:", error);
+      res.status(500).json({ error: "Failed to diagnose plant from image." });
+    }
+  }
+);
+
+// --- Plant chat endpoint ---
+
+const MOCK_CHAT_RESPONSE = {
+  reply: "Your plant looks great! Make sure to water it when the top inch of soil feels dry, and keep it in bright indirect light for best results.",
+};
+
+const CHAT_SYSTEM_PROMPT = (plantName: string) =>
+  `You are a plant care expert. The user is asking about their plant: ${plantName}. Give helpful, concise advice.`;
+
+type ChatRole = "user" | "assistant";
+type ChatMessage = { role: ChatRole; content: string };
+
+const VALID_CHAT_PROVIDERS = new Set<string>(["gemini", "groq"]);
+
+app.post(
+  "/api/plant-chat",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_CHAT_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
+    const { plantName, messages, aiProvider = "gemini" } = req.body as {
+      plantName?: string;
+      messages?: ChatMessage[];
+      aiProvider?: string;
+    };
+
+    if (!plantName || typeof plantName !== "string" || plantName.trim().length === 0) {
+      return res.status(400).json({ error: "plantName is required" });
+    }
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages array is required and must not be empty" });
+    }
+    if (!VALID_CHAT_PROVIDERS.has(aiProvider)) {
+      return res.status(400).json({ error: "aiProvider must be 'gemini' or 'groq' for chat" });
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "user") {
+      return res.status(400).json({ error: "Last message must be from the user" });
+    }
+
+    try {
+      let reply = "";
+
+      if (aiProvider === "gemini") {
+        const history = messages.slice(0, -1).map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+
+        const chat = geminiModel.startChat({
+          systemInstruction: CHAT_SYSTEM_PROMPT(plantName.trim()),
+          history,
+        });
+
+        const result = await withTimeout(
+          chat.sendMessage(lastMessage.content),
+          15_000,
+          "Gemini chat"
+        );
+        reply = result.response.text().trim();
+      } else {
+        if (!groqClient) {
+          return res.status(503).json({ error: "Groq is not configured on this server" });
+        }
+        const groqMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
+          { role: "system", content: CHAT_SYSTEM_PROMPT(plantName.trim()) },
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ];
+        const completion = await withTimeout(
+          groqClient.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: groqMessages,
+          }),
+          15_000,
+          "Groq chat"
+        );
+        reply = completion.choices[0]?.message?.content?.trim() ?? "";
+      }
+
+      if (!reply) {
+        return res.status(502).json({ error: "AI service returned an empty response" });
+      }
+
+      res.json({ reply });
+    } catch (error) {
+      console.error("Plant chat error:", error);
+      res.status(500).json({ error: "Failed to get chat response from AI service." });
+    }
+  }
+);
+
+// --- Plant compare endpoint ---
+
+const MOCK_COMPARE_RESPONSE = {
+  summary: "Both plants are popular houseplants, but they suit different growers. The Pothos is the ultimate beginner plant, while the Fiddle Leaf Fig rewards experienced gardeners with stunning foliage.",
+  categories: [
+    { label: "Watering",    plantA: "Water every 1–2 weeks, tolerates dry spells",      plantB: "Water every 7 days, do not let soil dry out fully" },
+    { label: "Light",       plantA: "Low to bright indirect light",                       plantB: "Bright indirect light only — hates being moved" },
+    { label: "Care Level",  plantA: "Easy",                                               plantB: "Hard" },
+    { label: "Toxicity",    plantA: "Toxic to pets if ingested",                          plantB: "Toxic to cats and dogs" },
+    { label: "Best For",    plantA: "Beginners",                                          plantB: "Experienced growers" },
+    { label: "Growth Speed",plantA: "Fast — can grow several feet per year",              plantB: "Slow indoors without ideal conditions" },
+    { label: "Fun Difference", plantA: "Nearly impossible to kill",                       plantB: "Notoriously dramatic — drops leaves from stress" },
+  ],
+  verdict: "Go with Pothos if you want something forgiving and low-effort. Choose Fiddle Leaf Fig if you're ready for a challenge and want a striking statement piece.",
+};
+
+const COMPARE_PROMPT = (plantA: string, plantB: string) => `
+You are a plant care expert. Compare "${plantA}" and "${plantB}" across these categories: Watering, Light, Care Level, Toxicity, Best For (beginner or expert), Growth Speed, and one Fun Difference.
+
+Respond with a JSON object ONLY — no markdown, no extra text.
+{
+  "summary": "string",
+  "categories": [
+    { "label": "string", "plantA": "string", "plantB": "string" }
+  ],
+  "verdict": "string"
+}
+
+- "summary": 2 sentences summarising the key difference between the two plants.
+- "categories": exactly 7 objects, one per category listed above, with concise values for each plant.
+- "verdict": 1–2 sentences recommending which plant suits which type of grower.
+`;
+
+app.post(
+  "/api/plant-compare",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_COMPARE_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
+    const { plantA, plantB, aiProvider = "gemini" } = req.body as {
+      plantA?: string;
+      plantB?: string;
+      aiProvider?: string;
+    };
+
+    if (!plantA || typeof plantA !== "string" || plantA.trim().length === 0) {
+      return res.status(400).json({ error: "plantA is required" });
+    }
+    if (!plantB || typeof plantB !== "string" || plantB.trim().length === 0) {
+      return res.status(400).json({ error: "plantB is required" });
+    }
+    if (plantA.length > 100 || plantB.length > 100) {
+      return res.status(400).json({ error: "Plant names must be 100 characters or fewer" });
+    }
+    if (!VALID_CHAT_PROVIDERS.has(aiProvider)) {
+      return res.status(400).json({ error: "aiProvider must be 'gemini' or 'groq' for compare" });
+    }
+
+    try {
+      let responseText = "";
+
+      if (aiProvider === "gemini") {
+        const result = await withTimeout(
+          geminiModel.generateContent(COMPARE_PROMPT(plantA.trim(), plantB.trim())),
+          15_000,
+          "Gemini compare"
+        );
+        responseText = result.response.text();
+      } else {
+        if (!groqClient) {
+          return res.status(503).json({ error: "Groq is not configured on this server" });
+        }
+        const completion = await withTimeout(
+          groqClient.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: COMPARE_PROMPT(plantA.trim(), plantB.trim()) }],
+            response_format: { type: "json_object" },
+          }),
+          15_000,
+          "Groq compare"
+        );
+        responseText = completion.choices[0]?.message?.content ?? "";
+      }
+
+      responseText = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+      let parsedResponse: unknown;
+      try {
+        parsedResponse = JSON.parse(responseText);
+      } catch {
+        console.error("Plant compare returned unparseable JSON:", responseText);
+        return res.status(502).json({ error: "AI service returned an invalid response" });
+      }
+
+      const r = parsedResponse as Record<string, unknown>;
+      if (
+        typeof r.summary !== "string" ||
+        !Array.isArray(r.categories) ||
+        typeof r.verdict !== "string"
+      ) {
+        console.error("Plant compare response missing expected fields:", parsedResponse);
+        return res.status(502).json({ error: "AI service returned an unexpected response shape" });
+      }
+
+      res.json(parsedResponse);
+    } catch (error) {
+      console.error("Plant compare error:", error);
+      res.status(500).json({ error: "Failed to compare plants." });
+    }
+  }
+);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);

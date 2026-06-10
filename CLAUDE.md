@@ -38,7 +38,7 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Frontend**: React Native 0.79.6 + Expo 53, Expo Router (file-based routing like Next.js), Supabase for auth and cloud persistence, AsyncStorage for local caching and offline fallback, NativeWind + Tailwind for styling.
 
-**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with two endpoints — `GET /health` and `POST /api/plant-tips` — that dispatches to one of five AI providers based on the `aiProvider` field in the request body. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database.
+**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with five endpoints — `GET /health`, `POST /api/plant-tips`, `POST /api/plant-diagnosis`, `POST /api/plant-chat`, and `POST /api/plant-compare`. `/api/plant-tips` dispatches to one of five AI providers based on the `aiProvider` field. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database.
 
 **Data flow**: All screens call `utilities/fetchPlantTips.ts` → reads `ai_provider` from AsyncStorage → `POST /api/plant-tips` with `{ plantName, aiProvider }` → chosen provider → `{ summary, details }`. The detail screen (`PlantDetailsAiGenerated.tsx`) checks `cache_${plantName}_${provider}` in AsyncStorage first and only calls the API on a miss. Cache keys are per-provider so switching providers always fetches fresh tips.
 
@@ -54,7 +54,7 @@ Three layers, each with a distinct purpose:
 
 | Layer | What lives here |
 |---|---|
-| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows` |
+| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows`, `plant_photos`, `plant_chats`, `plant_listings`, `plant_death_log`, `plant_health_log`, `user_streaks`, `user_badges`, `leaderboard` |
 | **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome_v2`, `ai_provider`, `theme_preference` always |
 | **AsyncStorage migration flags** | `collection_migrated_v1` — prevents re-running the one-time data migration |
 
@@ -71,6 +71,14 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 | `watering_log` | `user_id`, `plant_name`, `watered_at`, `amount_ml`, `notes` | `logic/wateringLogic.ts` |
 | `profiles` | `id` (= auth user id), `username`, `bio`, `avatar_url`, `updated_at` | `app/screens/editProfile.tsx` |
 | `follows` | `follower_id`, `following_id`, unique constraint | `logic/followLogic.ts` |
+| `plant_photos` | `user_id`, `plant_name`, `photo_url`, `caption`, `taken_at`, `is_primary` | `logic/photoLogic.ts` |
+| `plant_chats` | `user_id`, `plant_name`, `role` (`user`\|`assistant`), `content`, `created_at` | `logic/chatLogic.ts` |
+| `plant_listings` | `user_id`, `plant_name`, `listing_type` (`trade`\|`gift`\|`sell`), `price`, `description`, `is_active` | `logic/listingLogic.ts` |
+| `plant_death_log` | `user_id`, `plant_name`, `cause`, `notes`, `died_at`, `owned_since` | `logic/deathLogLogic.ts` |
+| `plant_health_log` | `user_id`, `plant_name`, `status`, `notes`, `logged_at` | `logic/healthLogLogic.ts` |
+| `user_streaks` | `user_id`, `current_streak`, `longest_streak`, `last_activity_date` | `logic/gamificationLogic.ts` |
+| `user_badges` | `user_id`, `badge_key`, `earned_at`; unique on `(user_id, badge_key)` | `logic/gamificationLogic.ts` |
+| `leaderboard` | `user_id`, `username`, `avatar_url`, `collection_count`, `streak`, `badge_count`, `score`, `updated_at` | `logic/gamificationLogic.ts` |
 
 Required Supabase policies beyond the defaults:
 ```sql
@@ -199,6 +207,22 @@ The backend accepts `aiProvider` in the `/api/plant-tips` request body. Valid va
 
 `PlantDetailsAiGenerated.tsx` also reads `ai_provider` from AsyncStorage and passes it to cache read/write calls so each provider's tips are cached independently.
 
+### Gamification system (`logic/gamificationLogic.ts`)
+
+Three Supabase tables power the gamification layer: `user_streaks`, `user_badges`, and `leaderboard`.
+
+- `recordActivity()` — increments the current streak for today; skips if already recorded today, resets to 1 if last activity was not yesterday. No-op for unauthenticated users.
+- `getStreakData()` → `StreakData` — returns `current_streak`, `longest_streak`, `last_activity_date`.
+- `checkAndAwardBadges(ctx)` — upserts earned badges based on context flags: `collectionCount`, `hasHealthLog`, `hasPhoto`, `hasDiagnosis`, `hasListing`, plus streak thresholds from `user_streaks`. Uses `ignoreDuplicates: true` to avoid double-awarding.
+- `getBadges(userId?)` → `EarnedBadge[]` — reads all earned badges for a user (defaults to current user).
+- `updateLeaderboard()` — upserts the `leaderboard` row with current counts (score = `collectionCount×10 + streak×5 + badgeCount×20`).
+
+`ALL_BADGES` constant (exported from `gamificationLogic.ts`) is the single source of truth for badge definitions (`key`, `emoji`, `name`, `description`). Both the awarding logic and the `BadgesSection` component read from it.
+
+**Wiring in `PlantDetailsAiGenerated.tsx`**: `runGamification(ctx)` is a local async helper that calls `recordActivity()` → `checkAndAwardBadges(ctx)` → `updateLeaderboard()` (fire-and-forget, errors swallowed). It is triggered after successful `addToCollection` (passes `collectionCount`), after photo upload (passes `hasPhoto: true`), after diagnosis (passes `hasDiagnosis: true`), and after creating a marketplace listing (passes `hasListing: true`).
+
+**Components**: `StreakBadge` (`components/StreakBadge.tsx`) — compact streak display (calls `getStreakData` on mount). `BadgesSection` (`components/BadgesSection.tsx`) — grid of all badge definitions; earned ones are highlighted (calls `getBadges` on mount). Both used on the profile screen.
+
 ### Anthropic API (watering suggestions)
 
 `suggestWateringInterval(plantName)` in `logic/wateringLogic.ts` calls the Anthropic API **directly from the client** via `fetch` (not the Node.js SDK, which is incompatible with React Native). Uses model `claude-haiku-4-5-20251001`, `max_tokens: 100`, prompt: `"How many days between waterings for a ${plantName}? Reply with a single integer only, no other text."` — parses as integer; falls back to `7` if parsing fails or the key is missing. Key sourced from `EXPO_PUBLIC_ANTHROPIC_API_KEY`.
@@ -248,7 +272,7 @@ Standardised on `StyleSheet.create()` with the theme factory pattern above. `Pla
 
 Tab screens (use ScreenLayout): `index.tsx`, `discover.tsx`, `collection.tsx`, `history.tsx`, `profile.tsx`, `settings.tsx`
 
-Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `editProfile.tsx`, `followersList.tsx`, `auth.tsx`, `username.tsx`
+Detail screens (no ScreenLayout): `PlantDetailsAiGenerated.tsx`, `publicProfile.tsx`, `publicPlantDetail.tsx`, `editProfile.tsx`, `followersList.tsx`, `compare.tsx`, `leaderboard.tsx`, `feed.tsx`, `deathLog.tsx`, `notifications.tsx`, `auth.tsx`, `username.tsx`
 
 All tab-screen scroll content should use `paddingBottom: 80` to clear the tab bar.
 
@@ -298,6 +322,14 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
 - `components/ScreenLayout.tsx` — wraps tab screens with BottomTabBar; do NOT use on detail screens
 - `components/WateringSection.tsx` — self-contained watering UI: schedule, log watering modal, history; props `{ plantName, isOwner }`
 - `components/PlantSocialSection.tsx` — likes and comments; props `{ plantOwnerUserId, plantName, currentUserId }`
+- `components/PlantPhotoGallery.tsx` — photo carousel with upload, delete, set-primary; props `{ plantName, isOwner, onPhotoUploaded? }`; wraps `photoLogic.ts`
+- `components/PlantDiagnosisButton.tsx` — image picker + diagnosis call; displays `DiagnosisResult` in a modal; props `{ plantName, onDiagnosed? }`
+- `components/PlantChatSection.tsx` — persistent chat thread per plant (user ↔ AI); loads history via `chatLogic.ts`, sends messages to backend `/api/plant-chat`; props `{ plantName }`
+- `components/BadgesSection.tsx` — renders all badges from `ALL_BADGES`; earned ones are highlighted; calls `getBadges` on mount; props `{ userId? }`
+- `components/StreakBadge.tsx` — compact streak display (flame icon + count); calls `getStreakData` on mount
+- `components/HealthLogSection.tsx` — health status log for a plant; props `{ plantName, isOwner }`
+- `components/SeasonalAdviceSection.tsx` — displays `SeasonalAdvice` based on current season and location; props `{ plantDetails? }`
+- `components/FeedItem.tsx` — renders a single `FeedItem` row in the social feed
 - `logic/` — pure business logic (no UI imports):
   - `cacheLogic.ts` — AsyncStorage-backed plant details + image cache; all functions take `(plantName, provider)` as args
   - `historyLogic.ts` — pure functions: `sortHistoryByDate`, `toggleFavoriteLogic`, `removeHistoryItem`
@@ -307,6 +339,19 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
   - `followLogic.ts` — Supabase `follows` table CRUD: `followUser`, `unfollowUser`, `isFollowing`, `getFollowerCount`, `getFollowingCount`
   - `socialLogic.ts` — `getLikes`, `toggleLike`, `getComments`, `addComment`, `deleteComment`; wraps `plant_likes` and `plant_comments` tables
   - `profileLogic.ts` — `uploadAvatar(uri)`, `updateBio(bio)`, `getProfileStats(userId)` (follower/following/plant/likes counts)
+  - `gamificationLogic.ts` — `recordActivity`, `getStreakData`, `checkAndAwardBadges`, `getBadges`, `updateLeaderboard`; exports `ALL_BADGES` and types `BadgeDef`, `StreakData`, `EarnedBadge`
+  - `photoLogic.ts` — `getPlantPhotos(plantName, userId?)`, `uploadPlantPhoto(plantName, uri, caption?)`, `deletePhoto(id, photoUrl)`, `setPrimaryPhoto(id, plantName, photoUrl)`; uploads to Supabase Storage bucket `plant-photos`; auto-sets first upload as primary and back-fills `plant_collection.photo_url`
+  - `chatLogic.ts` — `getPlantChat(plantName)`, `saveChatMessage(plantName, role, content)`, `clearPlantChat(plantName)`; wraps `plant_chats` table; authenticated only
+  - `diagnosisLogic.ts` — `diagnosePlant({ imageBase64, mimeType, plantName? })` → `DiagnosisResult`; calls backend `/api/plant-diagnosis`
+  - `compareLogic.ts` — `comparePlants(plantA, plantB)` → `CompareResult`; calls backend `/api/plant-compare`; defaults provider to `gemini` except when `ai_provider` is `groq`
+  - `listingLogic.ts` — `getMyListings`, `getMyListingForPlant`, `getListingsForUser`, `getActiveListings`, `createListing`, `deleteListing`, `toggleListing`; wraps `plant_listings` table
+  - `deathLogLogic.ts` — `getDeathLog`, `addDeathEntry(plantName, cause?, notes?, ownedSince?)`, `deleteDeathEntry(id)`; wraps `plant_death_log` table; authenticated only
+  - `healthLogLogic.ts` — `getRecentHealthLogCounts`, `getAllHealthLogs`, `addHealthEntry`; wraps `plant_health_log` table; AsyncStorage fallback for unauthenticated users
+  - `feedLogic.ts` — `getFeed(limitCount?)` → `FeedItem[]`; `formatActivityText(item)` — reads follow activity for the social feed
+  - `notificationLogic.ts` — `getNotifications`, `markAllRead`, `getUnreadCount`; wraps in-app notification records
+  - `locationLogic.ts` — `requestAndSaveLocation`, `getSavedLocation`; `getCurrentWeather(lat, lon)`, `getHemisphere(lat)`, `getCurrentSeason(lat)`
+  - `seasonalAdviceLogic.ts` — `getSeasonalAdvice(plantDetails?)` — combines location + weather + current season to return `SeasonalAdvice`; `getSeasonEmoji(season)`
+  - `potwLogic.ts` — `getCurrentNominations`, `nominatePlant`, `voteForNomination`, `getUserNominationThisWeek`; wraps Plant of the Week feature
 - `utilities/` — API/network helpers:
   - `fetchPlantTips.ts` — reads `ai_provider` from AsyncStorage, calls backend `/api/plant-tips` with `{ plantName, aiProvider }`
   - `fetchPlantImage.ts` — queries Wikipedia REST API for thumbnails
@@ -319,10 +364,16 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
   - `followersList.tsx` — followers or following list; params `{ userId, type: 'followers'|'following', username }`; two-step fetch (follow rows → profiles); optimistic follow toggle with rollback
   - `history.tsx` — search history with favourites filter; rich empty states with nav buttons to home
   - `collection.tsx` — plant collection with status filter (own / want / tried) and sort; 💧 overdue badge; rich empty state
-  - `PlantDetailsAiGenerated.tsx` — care tips, collection management, photo upload, push reminders, social section (`PlantSocialSection`), watering section (`WateringSection`); reads `ai_provider` from AsyncStorage for per-provider cache and provider badge
+  - `PlantDetailsAiGenerated.tsx` — care tips, collection management (status picker → "Save" → gamification), photo gallery (`PlantPhotoGallery`), diagnosis (`PlantDiagnosisButton`), chat (`PlantChatSection`), health log (`HealthLogSection`), seasonal advice (`SeasonalAdviceSection`), push reminders, marketplace listing modal, "Mark as Dead" modal, social section (`PlantSocialSection`), watering section (`WateringSection`); reads `ai_provider` from AsyncStorage for per-provider cache and provider badge; calls `runGamification()` on collection add, photo upload, diagnosis, and listing create
   - `settings.tsx` — profile quick-access card; APPEARANCE (light/dark/auto theme); REMINDERS; AI PROVIDER; ACCOUNT (Edit Profile, Log out, Delete Account); DATA (Clear Cache, Export Collection CSV, Clear all data); ABOUT; web-only back button
   - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Suggested Users section; Following Activity feed; debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
   - `publicProfile.tsx` — public view of another user's profile and collection; follow/unfollow button
+  - `compare.tsx` — side-by-side plant comparison; two text inputs → calls `compareLogic.comparePlants`; shows summary, category rows (label / plantA value / plantB value), and a verdict; "Compare again" / "Try again" resets the form
+  - `leaderboard.tsx` — ranked list from `leaderboard` Supabase table; shows avatar, username, score, collection count, streak, badge count; own row is highlighted
+  - `feed.tsx` — following activity feed using `feedLogic.getFeed`; renders `FeedItem` rows
+  - `deathLog.tsx` — "plant graveyard"; lists `plant_death_log` entries; "Add" modal with cause, notes, owned-since
+  - `notifications.tsx` — in-app notification list; marks all read on mount via `notificationLogic`
+  - `publicPlantDetail.tsx` — read-only care tips view for a plant on another user's public profile
 - `constants/` — static data and theme: `plants.ts` (PLANT_SUGGESTIONS, RANDOM_PLANTS), `theme.ts`
 - `styles/` — separated StyleSheet files for larger screens
 - `api/openai.ts`, `api/qwenai.ts` — unused/experimental, not wired into the app
@@ -345,6 +396,19 @@ All test files are in `__tests__/`. Run a single file: `npm test -- --testPathPa
 | `followLogic.test.ts` | `isFollowing`, `getFollowerCount`, `getFollowingCount`, `followUser`, `unfollowUser`; authenticated and unauthenticated paths |
 | `socialLogic.test.ts` | `getLikes`, `toggleLike`, `getComments`, `addComment`; multi-table queries use `mockReturnValueOnce` per call |
 | `profileLogic.test.ts` | `updateBio` (throws on unauth/error, resolves on success); `getProfileStats` (four parallel count queries); `uploadAvatar` not tested |
+| `gamificationLogic.test.ts` | `recordActivity` (new streak, increment, reset, idempotent today); `checkAndAwardBadges` (badge conditions); `getStreakData`; `getBadges`; `updateLeaderboard` |
+| `photoLogic.test.ts` | `getPlantPhotos`, `uploadPlantPhoto` (primary auto-set, collection back-fill), `deletePhoto`, `setPrimaryPhoto` |
+| `chatLogic.test.ts` | `getPlantChat`, `saveChatMessage`, `clearPlantChat`; authenticated and unauthenticated paths |
+| `diagnosisLogic.test.ts` | `diagnosePlant` — happy path, server error, network error |
+| `compareLogic.test.ts` | `comparePlants` — happy path, provider selection, server error |
+| `compare.test.tsx` | `CompareScreen` rendering, input → compare → result display, error state, "Compare again" / "Try again" reset |
+| `StreakBadge.test.tsx` | `StreakBadge` renders streak count; loading and zero states |
+| `BadgesSection.test.tsx` | `BadgesSection` renders all badge definitions; earned badges are visually distinct |
+| `leaderboard.test.tsx` | `LeaderboardScreen` renders ranked rows; own row highlighted |
+| `PlantPhotoGallery.test.tsx` | Gallery load, photo upload trigger, delete confirmation |
+| `PlantDiagnosisButton.test.tsx` | Image picker flow, diagnosis result display, error handling |
+| `PlantChatSection.test.tsx` | Chat load, send message, clear chat |
+| `PlantDetailsGamification.test.tsx` | `recordActivity`, `checkAndAwardBadges`, `updateLeaderboard` called after successful `addToCollection`; not called on failure |
 
 ### Mock patterns used across Supabase test files
 

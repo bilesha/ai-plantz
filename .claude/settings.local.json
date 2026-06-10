@@ -32,7 +32,14 @@
       "Bash(PGPASSWORD=\"3T6TQfxXMGSdgwJF\" psql *)",
       "Bash(node *)",
       "Bash(curl -s \"http://localhost:8082\")",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('jest',{}\\), 'deps': list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\), 'devDeps': list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)}, indent=2\\)\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest',{}\\), indent=2\\)\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.items\\(\\) if 'jest' in k.lower\\(\\) or k=='scripts']\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest',{}\\),indent=2\\)\\)\")",
+      "Bash(npm ls *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2\\)\\)\")",
+      "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); import json; cfg=json.loads\\(d[d.find\\('{'\\):]\\) if '{' in d else {}; [print\\(k,':',v\\) for k,v in cfg.get\\('configs',[{}]\\)[0].items\\(\\) if k in ['preset','setupFiles','setupFilesAfterFramework','setupFilesAfterEach','testEnvironment','transform','moduleNameMapper']]\")"
     ]
   }
 }

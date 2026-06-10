@@ -1,20 +1,29 @@
 # ai-plantz
 
-A cross-platform botanical assistant app built with React Native/Expo. Search for any plant and get AI-generated care tips powered by five selectable AI providers, with a watering scheduler, personal plant collection, social features, and full cloud sync via Supabase.
+A cross-platform botanical assistant app built with React Native/Expo. Search for any plant and get AI-generated care tips powered by five selectable AI providers, with a watering scheduler, plant photo gallery, AI diagnosis, persistent plant chat, gamification (streaks, badges, leaderboard), social features, a marketplace, and full cloud sync via Supabase.
 
 ## Features
 
 - **AI plant care tips** — search any plant and get a summary plus 11 structured care fields (watering, light, fertilizer, care level, toxicity, fun fact, seasonal care, compatibility, propagation, pairing plants, troubleshooting)
 - **Multi-provider AI** — switch between Gemini, Groq, DeepSeek, Qwen, and Moonshot in Settings; each provider's tips are cached independently
-- **Plant collection** — mark plants as _Own it_, _Want it_, or _Tried it_; add ratings (1–5 stars), personal notes, and custom photos
+- **Plant collection** — mark plants as _Own it_, _Want it_, or _Tried it_; add ratings (1–5 stars), personal notes, and a full photo gallery
+- **Multiple photos** — upload, caption, delete, and set a primary photo per plant; primary syncs back to the collection card thumbnail
+- **AI plant diagnosis** — pick a photo and get an AI health assessment (issues, diagnosis, recommendations) via the backend
+- **Plant chat** — persistent per-plant AI chat history stored in Supabase; continue conversations across sessions
+- **Plant comparison** — compare any two plants side-by-side: summary, category rows (light, water, care level, etc.), and a verdict
 - **Watering tracker** — set a watering schedule (days interval), log each watering with date, amount (ml), and notes, view history, and delete entries; the collection screen shows a 💧 badge on any plant that is due or overdue
 - **AI watering suggestions** — tap "AI Suggest" in the schedule modal to get a recommended interval for your specific plant from Claude Haiku
 - **Watering reminders** — schedule push notifications at 3, 7, 14, or 30-day intervals (iOS and Android; hidden on web)
-- **Social** — like and comment on plants, follow other users, view follower/following lists, see a following activity feed on Discover, and view public profiles
+- **Gamification** — earn badges (First Plant, Collector, Green Thumb, Photographer, Plant Doctor, Social Butterfly, streak badges), track daily activity streaks, and climb the global leaderboard (score = collection×10 + streak×5 + badges×20)
+- **Seasonal advice** — care tips adapted to the user's current season and local weather (location-aware)
+- **Health log** — track plant health status over time with a per-plant log
+- **Marketplace** — list plants for trade, gift, or sale; browse active listings
+- **Death log** — record plants that have died with cause and notes (plant graveyard)
+- **Social** — like and comment on plants, follow other users, view follower/following lists, see a following activity feed, and view public profiles
 - **Discover** — trending plants (by collection count), suggested users to follow, debounced username search, following activity feed
 - **Search history** — full browsing history with favourite toggling, search, and rich empty states
 - **Light / dark / auto theme** — persisted preference via ThemeContext + AsyncStorage
-- **Cloud sync** — plant history, collection, watering logs, profiles, and follows stored in Supabase with RLS; unauthenticated users fall back to AsyncStorage
+- **Cloud sync** — all data stored in Supabase with RLS; unauthenticated users fall back to AsyncStorage
 - **Export** — export collection as CSV from Settings
 
 ## Tech Stack
@@ -24,8 +33,8 @@ A cross-platform botanical assistant app built with React Native/Expo. Search fo
 | Frontend | React Native 0.79.6, Expo 53, Expo Router (file-based) |
 | Styling | `StyleSheet.create()` with theme factory pattern; NativeWind on `PlantCareTips.tsx` only |
 | Backend | Express 5.1, TypeScript, ts-node |
-| AI (care tips) | Gemini, Groq, DeepSeek, Qwen, Moonshot — dispatched by backend |
-| AI (watering) | Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) via direct fetch from client |
+| AI (care tips, diagnosis, chat, compare) | Gemini, Groq, DeepSeek, Qwen, Moonshot — dispatched by backend |
+| AI (watering suggestions) | Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) via direct fetch from client |
 | Auth & DB | Supabase (PostgreSQL + RLS + Storage) |
 | Local cache | AsyncStorage |
 
@@ -165,6 +174,99 @@ end;
 $$;
 ```
 
+Also create the gamification, photo, chat, listing, and death log tables:
+
+```sql
+-- Gamification
+create table user_streaks (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  current_streak integer not null default 0,
+  longest_streak integer not null default 0,
+  last_activity_date date
+);
+alter table user_streaks enable row level security;
+create policy "own rows only" on user_streaks for all using (auth.uid() = user_id);
+
+create table user_badges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  badge_key text not null,
+  earned_at timestamptz default now(),
+  constraint user_badges_unique unique (user_id, badge_key)
+);
+alter table user_badges enable row level security;
+create policy "own rows only" on user_badges for all using (auth.uid() = user_id);
+create policy "public read" on user_badges for select using (true);
+
+create table leaderboard (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  username text,
+  avatar_url text,
+  collection_count integer default 0,
+  streak integer default 0,
+  badge_count integer default 0,
+  score integer default 0,
+  updated_at timestamptz default now()
+);
+alter table leaderboard enable row level security;
+create policy "own rows only" on leaderboard for all using (auth.uid() = user_id);
+create policy "public read" on leaderboard for select using (true);
+
+-- Photos
+create table plant_photos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  photo_url text not null,
+  caption text,
+  taken_at timestamptz default now(),
+  is_primary boolean default false
+);
+alter table plant_photos enable row level security;
+create policy "own rows only" on plant_photos for all using (auth.uid() = user_id);
+create policy "public read" on plant_photos for select using (true);
+
+-- Chat
+create table plant_chats (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  role text not null check (role in ('user','assistant')),
+  content text not null,
+  created_at timestamptz default now()
+);
+alter table plant_chats enable row level security;
+create policy "own rows only" on plant_chats for all using (auth.uid() = user_id);
+
+-- Marketplace
+create table plant_listings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  listing_type text not null check (listing_type in ('trade','gift','sell')),
+  price integer,
+  description text,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+alter table plant_listings enable row level security;
+create policy "own rows only" on plant_listings for all using (auth.uid() = user_id);
+create policy "public read" on plant_listings for select using (true);
+
+-- Death log
+create table plant_death_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  cause text,
+  notes text,
+  died_at timestamptz default now(),
+  owned_since timestamptz
+);
+alter table plant_death_log enable row level security;
+create policy "own rows only" on plant_death_log for all using (auth.uid() = user_id);
+```
+
 If upgrading an existing database:
 
 ```sql
@@ -219,22 +321,35 @@ ai-plantz/
 │   ├── _layout.tsx                       # Root layout — ThemeProvider, ToastProvider, auth listener, notification channel
 │   ├── index.tsx                         # Home / search screen
 │   └── screens/
-│       ├── PlantDetailsAiGenerated.tsx   # Care tips, collection, watering section, social
+│       ├── PlantDetailsAiGenerated.tsx   # Care tips, photos, diagnosis, chat, collection, gamification, watering, social
 │       ├── collection.tsx                # Collection with status filter, 💧 overdue badge
 │       ├── history.tsx                   # Search history with favourites filter
 │       ├── discover.tsx                  # Trending plants, suggested users, activity feed, user search
-│       ├── profile.tsx                   # Own profile — stats, collection, follow counts
+│       ├── profile.tsx                   # Own profile — stats, streaks, badges, collection, follow counts
 │       ├── publicProfile.tsx             # Another user's public profile + follow button
+│       ├── publicPlantDetail.tsx         # Read-only care tips from a public profile
 │       ├── editProfile.tsx               # Edit username, bio, avatar
 │       ├── followersList.tsx             # Followers / following list with follow toggles
+│       ├── compare.tsx                   # Side-by-side plant comparison
+│       ├── leaderboard.tsx               # Global leaderboard ranked by score
+│       ├── feed.tsx                      # Following activity feed
+│       ├── deathLog.tsx                  # Plant graveyard — records of deceased plants
+│       ├── notifications.tsx             # In-app notification list
 │       ├── settings.tsx                  # Theme, AI provider, reminders, account, data
 │       ├── auth.tsx                      # Login / sign-up
 │       └── username.tsx                  # Post-signup username setup
 ├── backend/
-│   └── src/index.ts                      # Express server — /health, /api/plant-tips (5 AI providers)
+│   └── src/index.ts                      # Express server — /health + 4 POST endpoints
 ├── components/
-│   ├── WateringSection.tsx               # Watering schedule, log, history (used in PlantDetailsAiGenerated)
+│   ├── WateringSection.tsx               # Watering schedule, log, history
 │   ├── PlantSocialSection.tsx            # Likes + comments
+│   ├── PlantPhotoGallery.tsx             # Multi-photo carousel with upload/delete/primary
+│   ├── PlantDiagnosisButton.tsx          # Image picker + AI health diagnosis
+│   ├── PlantChatSection.tsx              # Persistent per-plant AI chat
+│   ├── BadgesSection.tsx                 # Badge grid (earned vs locked)
+│   ├── StreakBadge.tsx                   # Compact daily streak display
+│   ├── HealthLogSection.tsx              # Plant health status log
+│   ├── SeasonalAdviceSection.tsx         # Season + weather-aware care tips
 │   ├── BottomTabBar.tsx                  # 6-tab navigation bar
 │   ├── ScreenLayout.tsx                  # Wraps tab screens with BottomTabBar
 │   ├── SkeletonLoader.tsx
@@ -247,20 +362,33 @@ ai-plantz/
 │   ├── theme.ts                          # lightTheme, darkTheme, Theme type
 │   └── plants.ts                         # PLANT_SUGGESTIONS, RANDOM_PLANTS
 ├── logic/
-│   ├── wateringLogic.ts                  # getWateringLog, logWatering, deleteWateringEntry, setWateringInterval, getWateringInterval, suggestWateringInterval
-│   ├── collectionLogic.ts                # plant_collection CRUD + photo upload + migration
+│   ├── wateringLogic.ts                  # Watering log, schedule, AI interval suggestion
+│   ├── collectionLogic.ts                # plant_collection CRUD + migration
 │   ├── cacheLogic.ts                     # Per-provider AI tips cache + image cache
 │   ├── historyLogic.ts                   # Sort, toggle favourite, remove history item
 │   ├── reminderLogic.ts                  # Expo Notifications scheduling
 │   ├── followLogic.ts                    # follows table CRUD
 │   ├── socialLogic.ts                    # Likes and comments
-│   └── profileLogic.ts                   # Avatar upload, bio update, profile stats
+│   ├── profileLogic.ts                   # Avatar upload, bio update, profile stats
+│   ├── gamificationLogic.ts              # Streaks, badges, leaderboard
+│   ├── photoLogic.ts                     # Multi-photo upload/delete/primary (Supabase Storage)
+│   ├── chatLogic.ts                      # Persistent plant chat history
+│   ├── diagnosisLogic.ts                 # AI plant health diagnosis
+│   ├── compareLogic.ts                   # Side-by-side plant comparison
+│   ├── listingLogic.ts                   # Marketplace listings
+│   ├── deathLogLogic.ts                  # Plant death log
+│   ├── healthLogLogic.ts                 # Health status log
+│   ├── feedLogic.ts                      # Following activity feed
+│   ├── notificationLogic.ts              # In-app notifications
+│   ├── locationLogic.ts                  # Location + weather
+│   ├── seasonalAdviceLogic.ts            # Season-aware care advice
+│   └── potwLogic.ts                      # Plant of the Week nominations + voting
 ├── utilities/
 │   ├── fetchPlantTips.ts                 # Calls backend /api/plant-tips
 │   ├── fetchPlantImage.ts                # Wikipedia thumbnail fetch
 │   └── storage.ts                        # plant_history CRUD
 ├── types.ts                              # PlantDetails, PlantEntry, CollectionEntry, OwnershipStatus
-└── __tests__/                            # Jest test suite (147 tests, 12 files)
+└── __tests__/                            # Jest test suite (25 test files)
 ```
 
 ## Backend API
@@ -295,10 +423,28 @@ Rate-limited to 10 requests per IP per minute.
 
 **Error responses:** `400` invalid provider · `429` rate limited · `502` unparseable AI response · `503` provider key not configured · `500` other error
 
+### `POST /api/plant-diagnosis`
+
+**Request body:** `{ "imageBase64": "...", "mimeType": "image/jpeg", "plantName": "Monstera" }`
+
+**Success response (200):** `{ "healthy": bool, "issues": [...], "diagnosis": "...", "recommendations": [...] }`
+
+### `POST /api/plant-chat`
+
+**Request body:** `{ "plantName": "...", "message": "...", "history": [...] }`
+
+**Success response (200):** `{ "reply": "..." }`
+
+### `POST /api/plant-compare`
+
+**Request body:** `{ "plantA": "Monstera", "plantB": "Pothos", "aiProvider": "gemini" }`
+
+**Success response (200):** `{ "summary": "...", "categories": [{ "label": "...", "plantA": "...", "plantB": "..." }], "verdict": "..." }`
+
 ## Running Tests
 
 ```bash
-npm test                                    # all 147 tests
+npm test                                    # all tests
 npm test -- --testPathPattern=history      # single file
 ```
 
@@ -316,6 +462,19 @@ npm test -- --testPathPattern=history      # single file
 | `followLogic.test.ts` | `isFollowing`, `getFollowerCount`, `getFollowingCount`, `followUser`, `unfollowUser` |
 | `socialLogic.test.ts` | `getLikes`, `toggleLike`, `getComments`, `addComment` |
 | `profileLogic.test.ts` | `updateBio`, `getProfileStats` |
+| `gamificationLogic.test.ts` | `recordActivity`, `checkAndAwardBadges`, `getStreakData`, `getBadges`, `updateLeaderboard` |
+| `photoLogic.test.ts` | `getPlantPhotos`, `uploadPlantPhoto`, `deletePhoto`, `setPrimaryPhoto` |
+| `chatLogic.test.ts` | `getPlantChat`, `saveChatMessage`, `clearPlantChat` |
+| `diagnosisLogic.test.ts` | `diagnosePlant` — happy path, server error, network error |
+| `compareLogic.test.ts` | `comparePlants` — happy path, provider selection, server error |
+| `compare.test.tsx` | `CompareScreen` — rendering, compare flow, error state, reset |
+| `StreakBadge.test.tsx` | `StreakBadge` — renders streak count; loading and zero states |
+| `BadgesSection.test.tsx` | `BadgesSection` — all badges rendered; earned vs locked distinction |
+| `leaderboard.test.tsx` | `LeaderboardScreen` — ranked rows, own row highlighted |
+| `PlantPhotoGallery.test.tsx` | Gallery load, upload trigger, delete confirmation |
+| `PlantDiagnosisButton.test.tsx` | Image picker flow, diagnosis result display, error handling |
+| `PlantChatSection.test.tsx` | Chat load, send message, clear chat |
+| `PlantDetailsGamification.test.tsx` | Gamification wiring — `recordActivity`, `checkAndAwardBadges`, `updateLeaderboard` called/not called on collection add |
 
 ## Testing Strategy
 
@@ -328,7 +487,7 @@ npm test -- --testPathPattern=history      # single file
 
 ### Unit tests
 ```bash
-npm test                                        # all 147 tests
+npm test                                        # all tests (25 suites)
 npm test -- --testPathPattern=wateringLogic    # single suite
 ```
 
@@ -359,3 +518,5 @@ docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 ai-plantz
 - **Web compatibility** — `Alert.alert` does not work on web; all confirmation dialogs branch on `Platform.OS === 'web'`. Watering history date input uses `TextInput` rather than a native date picker.
 - The backend is **stateless** — every cache miss triggers an AI provider call. Cache keys are per-provider so switching providers always fetches fresh tips.
 - Wikipedia thumbnails use a three-state cache: `undefined` = not fetched, `null` = no image available, string = cached URL.
+- **Gamification** is wired into `PlantDetailsAiGenerated` — `recordActivity`, `checkAndAwardBadges`, and `updateLeaderboard` run fire-and-forget after adding to collection, uploading a photo, completing a diagnosis, and creating a marketplace listing.
+- **Plant photos** are stored in the `plant-photos` Supabase Storage bucket. The first photo uploaded for a plant is automatically set as primary and its URL is back-filled into `plant_collection.photo_url`.

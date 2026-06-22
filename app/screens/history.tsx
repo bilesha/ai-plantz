@@ -120,7 +120,7 @@ export default function HistoryScreen() {
             <Text style={s.emptyIcon}>🔍</Text>
             <Text style={s.emptyTitle}>No searches yet</Text>
             <Text style={s.emptyBody}>Plants you search for will appear here. Tap the star to save your favourites.</Text>
-            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/')}>
+            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/screens/aiAssistant')}>
               <Text style={s.emptyBtnText}>Search your first plant →</Text>
             </TouchableOpacity>
           </View>

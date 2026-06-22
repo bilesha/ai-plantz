@@ -286,7 +286,7 @@ export default function CollectionScreen() {
             <Text style={s.emptyIcon}>🪴</Text>
             <Text style={s.emptyTitle}>Your collection is empty</Text>
             <Text style={s.emptyBody}>Start searching for plants and save them here with your ownership status, ratings, and notes.</Text>
-            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/')}>
+            <TouchableOpacity style={s.emptyBtn} onPress={() => router.push('/screens/aiAssistant')}>
               <Text style={s.emptyBtnText}>Search for plants →</Text>
             </TouchableOpacity>
           </View>

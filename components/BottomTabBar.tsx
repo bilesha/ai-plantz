@@ -4,12 +4,12 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { useTheme, type Theme } from '../constants/theme';
 
 const TABS = [
-  { icon: '🏠', label: 'Home',       route: '/',                   key: '' },
-  { icon: '🔍', label: 'Discover',   route: '/screens/discover',   key: 'discover' },
-  { icon: '🪴', label: 'Collection', route: '/screens/collection', key: 'collection' },
-  { icon: '📜', label: 'History',    route: '/screens/history',    key: 'history' },
-  { icon: '👤', label: 'Profile',    route: '/screens/profile',    key: 'profile' },
-  { icon: '⚙️', label: 'Settings',   route: '/screens/settings',   key: 'settings' },
+  { icon: '🔍', label: 'Discover',     route: '/',                      key: '' },
+  { icon: '🤖', label: 'AI Assistant', route: '/screens/aiAssistant',   key: 'aiAssistant' },
+  { icon: '🪴', label: 'Collection',   route: '/screens/collection',    key: 'collection' },
+  { icon: '📜', label: 'History',      route: '/screens/history',       key: 'history' },
+  { icon: '👤', label: 'Profile',      route: '/screens/profile',       key: 'profile' },
+  { icon: '⚙️', label: 'Settings',     route: '/screens/settings',      key: 'settings' },
 ] as const;
 
 // Bottom safe-area inset: approximated without a native dependency.

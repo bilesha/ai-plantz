@@ -454,7 +454,7 @@ export default function SettingsScreen() {
       <Text style={s.sectionLabel}>ABOUT</Text>
       <View style={s.section}>
         <View style={s.aboutRow}>
-          <Text style={s.aboutApp}>LeafyAI</Text>
+          <Text style={s.aboutApp}>Rootnote</Text>
           <Text style={s.aboutVersion}>v{version}</Text>
         </View>
         <Text style={s.aboutTagline}>Your AI Botanical Assistant</Text>

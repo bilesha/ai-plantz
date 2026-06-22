@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ai-plantz** is a cross-platform botanical assistant app built with React Native/Expo and an Express.js backend. Users search for plants and receive AI-generated care tips powered by multiple AI providers (Gemini, Groq, DeepSeek, Qwen, Moonshot). User data (collection, history, watering logs, profile) is persisted in Supabase for authenticated users, with AsyncStorage as an offline fallback.
+**Rootnote** is a cross-platform botanical assistant app built with React Native/Expo and an Express.js backend. Users search for plants and receive AI-generated care tips powered by multiple AI providers (Gemini, Groq, DeepSeek, Qwen, Moonshot). User data (collection, history, watering logs, profile) is persisted in Supabase for authenticated users, with AsyncStorage as an offline fallback.
 
 ## Commands
 
@@ -38,7 +38,7 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Frontend**: React Native 0.79.6 + Expo 53, Expo Router (file-based routing like Next.js), Supabase for auth and cloud persistence, AsyncStorage for local caching and offline fallback, NativeWind + Tailwind for styling.
 
-**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with five endpoints — `GET /health`, `POST /api/plant-tips`, `POST /api/plant-diagnosis`, `POST /api/plant-chat`, and `POST /api/plant-compare`. `/api/plant-tips` dispatches to one of five AI providers based on the `aiProvider` field. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database.
+**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with five endpoints — `GET /health`, `POST /api/plant-tips`, `POST /api/plant-diagnosis`, `POST /api/plant-chat`, and `POST /api/plant-compare`. `/api/plant-tips` dispatches to one of five AI providers based on the `aiProvider` field. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database. When `MOCK_MODE=true`, every endpoint short-circuits and returns a fixed mock response with no AI provider call — used for free, instant, repeatable Playwright/automated test runs.
 
 **Data flow**: All screens call `utilities/fetchPlantTips.ts` → reads `ai_provider` from AsyncStorage → `POST /api/plant-tips` with `{ plantName, aiProvider }` → chosen provider → `{ summary, details }`. The detail screen (`PlantDetailsAiGenerated.tsx`) checks `cache_${plantName}_${provider}` in AsyncStorage first and only calls the API on a miss. Cache keys are per-provider so switching providers always fetches fresh tips.
 
@@ -54,7 +54,7 @@ Three layers, each with a distinct purpose:
 
 | Layer | What lives here |
 |---|---|
-| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows`, `plant_photos`, `plant_chats`, `plant_listings`, `plant_death_log`, `plant_health_log`, `user_streaks`, `user_badges`, `leaderboard` |
+| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows`, `plant_photos`, `plant_chats`, `plant_listings`, `plant_death_log`, `plant_health_log`, `health_log_comments`, `plant_likes`, `plant_comments`, `notifications`, `potw_nominations`, `potw_votes`, `user_streaks`, `user_badges`, `leaderboard` |
 | **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome_v2`, `ai_provider`, `theme_preference` always |
 | **AsyncStorage migration flags** | `collection_migrated_v1` — prevents re-running the one-time data migration |
 
@@ -69,67 +69,32 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 | `plant_collection` | `user_id`, `plant_name`, `summary`, `details` (jsonb), `status`, `rating`, `notes`, `photo_url`, `watering_interval_days`, `next_watering_date` | `logic/collectionLogic.ts` |
 | `plant_history` | `user_id`, `plant_name`, `summary`, `details` (jsonb), `is_favorite`, `last_viewed` | `utilities/storage.ts` |
 | `watering_log` | `user_id`, `plant_name`, `watered_at`, `amount_ml`, `notes` | `logic/wateringLogic.ts` |
-| `profiles` | `id` (= auth user id), `username`, `bio`, `avatar_url`, `updated_at` | `app/screens/editProfile.tsx` |
+| `profiles` | `id` (= auth user id), `username`, `bio`, `avatar_url`, `updated_at`, `latitude`, `longitude`, `location_updated_at` | `app/screens/editProfile.tsx`, `logic/locationLogic.ts` |
 | `follows` | `follower_id`, `following_id`, unique constraint | `logic/followLogic.ts` |
 | `plant_photos` | `user_id`, `plant_name`, `photo_url`, `caption`, `taken_at`, `is_primary` | `logic/photoLogic.ts` |
 | `plant_chats` | `user_id`, `plant_name`, `role` (`user`\|`assistant`), `content`, `created_at` | `logic/chatLogic.ts` |
 | `plant_listings` | `user_id`, `plant_name`, `listing_type` (`trade`\|`gift`\|`sell`), `price`, `description`, `is_active` | `logic/listingLogic.ts` |
 | `plant_death_log` | `user_id`, `plant_name`, `cause`, `notes`, `died_at`, `owned_since` | `logic/deathLogLogic.ts` |
-| `plant_health_log` | `user_id`, `plant_name`, `status`, `notes`, `logged_at` | `logic/healthLogLogic.ts` |
+| `plant_health_log` | `user_id`, `plant_name`, `note`, `logged_at` | `logic/healthLogLogic.ts` |
+| `health_log_comments` | `user_id`, `health_log_id` (→ `plant_health_log.id`), `body`, `created_at` | `logic/healthLogLogic.ts` |
+| `plant_likes` | `user_id`, `plant_owner_id`, `plant_name`, `created_at` | `logic/socialLogic.ts` |
+| `plant_comments` | `user_id`, `plant_owner_id`, `plant_name`, `body`, `created_at` | `logic/socialLogic.ts` |
+| `notifications` | `user_id`, `actor_id`, `type`, `read`, `created_at` | `logic/notificationLogic.ts` (read-only from the app — see note below) |
+| `potw_nominations` | `user_id`, `plant_name`, `reason`, `week_start` (date) | `logic/potwLogic.ts` |
+| `potw_votes` | `user_id`, `nomination_id` (→ `potw_nominations.id`), `week_start`; unique on `(user_id, nomination_id)` | `logic/potwLogic.ts` |
 | `user_streaks` | `user_id`, `current_streak`, `longest_streak`, `last_activity_date` | `logic/gamificationLogic.ts` |
 | `user_badges` | `user_id`, `badge_key`, `earned_at`; unique on `(user_id, badge_key)` | `logic/gamificationLogic.ts` |
 | `leaderboard` | `user_id`, `username`, `avatar_url`, `collection_count`, `streak`, `badge_count`, `score`, `updated_at` | `logic/gamificationLogic.ts` |
 
+**`notifications` is never inserted into by app code** — `notificationLogic.ts` only reads and updates (`getNotifications`, `markAllRead`, `getUnreadCount`). Rows must be populated by a Supabase trigger/function on `follows`/`plant_likes`/`plant_comments` inserts (not present in this repo). The `notifications.tsx` screen and the bell badge will stay empty until that trigger exists.
+
 Required Supabase policies beyond the defaults:
-```sql
--- Allow anyone to read profiles (for discover / public profiles)
-create policy "public read" on profiles for select using (true);
 
--- Allow anyone to read plant_collection (for public profiles + trending)
-create policy "public read" on plant_collection for select using (true);
-
--- follows table
-create table follows (
-  id uuid primary key default gen_random_uuid(),
-  follower_id uuid references auth.users(id) on delete cascade not null,
-  following_id uuid references auth.users(id) on delete cascade not null,
-  created_at timestamptz default now(),
-  constraint follows_unique unique (follower_id, following_id)
-);
-alter table follows enable row level security;
-create policy "own follows only" on follows for all using (auth.uid() = follower_id);
-create policy "public read" on follows for select using (true);
-```
+Full RLS policy and table-creation SQL lives in the Supabase dashboard / migrations — not duplicated here since the table reference above already covers the schema.
 
 Required Supabase RPC functions:
-```sql
--- Used by discover.tsx trending section
-create or replace function get_trending_plants(limit_count int default 10)
-returns table(plant_name text, collection_count bigint)
-language sql security definer as $$
-  select plant_name, count(*) as collection_count
-  from plant_collection
-  group by plant_name
-  order by collection_count desc
-  limit limit_count;
-$$;
 
--- Used by settings.tsx delete account
-create or replace function delete_user()
-returns void language plpgsql security definer as $$
-begin
-  delete from auth.users where id = auth.uid();
-end;
-$$;
-```
-
-Migration SQL (run once if upgrading an existing database):
-```sql
-ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS amount_ml integer;
-ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS notes text;
-ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS watering_interval_days integer;
-ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS next_watering_date timestamptz;
-```
+RPC function definitions (`get_trending_plants`, `delete_user`) live in Supabase — see dashboard.
 
 ### AsyncStorage keys (always local — never synced to Supabase)
 
@@ -171,6 +136,22 @@ type PlantEntry = {
 };
 
 type OwnershipStatus = 'own' | 'want' | 'tried';
+
+type HealthLogEntry = {
+  id: string;
+  note: string;
+  logged_at: string;
+};
+
+type HealthLogComment = {
+  id: string;
+  user_id: string;
+  health_log_id: string;
+  body: string;
+  created_at: string;
+  username: string | null;
+  avatar_url: string | null;
+};
 
 type CollectionEntry = {
   name: string;
@@ -300,6 +281,7 @@ EXPO_PUBLIC_API_URL=...                 # Backend URL exposed to client (must ha
 EXPO_PUBLIC_SUPABASE_URL=...            # Supabase project URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY=...       # Supabase anon/public key
 EXPO_PUBLIC_ANTHROPIC_API_KEY=...       # Optional — powers AI watering interval suggestions (Haiku)
+EXPO_PUBLIC_OPENWEATHER_API_KEY=...     # Optional — powers weather-aware seasonal advice (logic/locationLogic.ts); getCurrentWeather returns null without it
 ```
 
 **Backend (`backend/.env`)**
@@ -311,6 +293,7 @@ QWEN_API_KEY=...
 MOONSHOT_API_KEY=...
 PORT=5000
 ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
+MOCK_MODE=...                # Optional — "true" disables all AI provider calls; every AI endpoint returns a fixed mock response (used for automated test runs)
 ```
 
 ## File Layout (non-obvious)
@@ -346,10 +329,10 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
   - `compareLogic.ts` — `comparePlants(plantA, plantB)` → `CompareResult`; calls backend `/api/plant-compare`; defaults provider to `gemini` except when `ai_provider` is `groq`
   - `listingLogic.ts` — `getMyListings`, `getMyListingForPlant`, `getListingsForUser`, `getActiveListings`, `createListing`, `deleteListing`, `toggleListing`; wraps `plant_listings` table
   - `deathLogLogic.ts` — `getDeathLog`, `addDeathEntry(plantName, cause?, notes?, ownedSince?)`, `deleteDeathEntry(id)`; wraps `plant_death_log` table; authenticated only
-  - `healthLogLogic.ts` — `getRecentHealthLogCounts`, `getAllHealthLogs`, `addHealthEntry`; wraps `plant_health_log` table; AsyncStorage fallback for unauthenticated users
+  - `healthLogLogic.ts` — `getHealthLog`, `addHealthEntry`, `getRecentHealthLogCounts`, `getAllHealthLogs`, `deleteHealthEntry`; wraps `plant_health_log` table (AsyncStorage fallback for unauthenticated users); plus `getHealthLogComments`, `addHealthLogComment`, `deleteHealthLogComment` wrapping `health_log_comments` (authenticated only)
   - `feedLogic.ts` — `getFeed(limitCount?)` → `FeedItem[]`; `formatActivityText(item)` — reads follow activity for the social feed
-  - `notificationLogic.ts` — `getNotifications`, `markAllRead`, `getUnreadCount`; wraps in-app notification records
-  - `locationLogic.ts` — `requestAndSaveLocation`, `getSavedLocation`; `getCurrentWeather(lat, lon)`, `getHemisphere(lat)`, `getCurrentSeason(lat)`
+  - `notificationLogic.ts` — `getNotifications`, `markAllRead`, `getUnreadCount`; reads/updates the `notifications` table only — nothing in this codebase inserts rows (see note in Supabase tables above)
+  - `locationLogic.ts` — `requestAndSaveLocation` (writes `profiles.latitude`/`longitude`/`location_updated_at`), `getSavedLocation`; `getCurrentWeather(lat, lon)` (OpenWeatherMap, needs `EXPO_PUBLIC_OPENWEATHER_API_KEY`, returns `null` without it), `getHemisphere(lat)`, `getCurrentSeason(lat)`
   - `seasonalAdviceLogic.ts` — `getSeasonalAdvice(plantDetails?)` — combines location + weather + current season to return `SeasonalAdvice`; `getSeasonEmoji(season)`
   - `potwLogic.ts` — `getCurrentNominations`, `nominatePlant`, `voteForNomination`, `getUserNominationThisWeek`; wraps Plant of the Week feature
 - `utilities/` — API/network helpers:
@@ -366,7 +349,7 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
   - `collection.tsx` — plant collection with status filter (own / want / tried) and sort; 💧 overdue badge; rich empty state
   - `PlantDetailsAiGenerated.tsx` — care tips, collection management (status picker → "Save" → gamification), photo gallery (`PlantPhotoGallery`), diagnosis (`PlantDiagnosisButton`), chat (`PlantChatSection`), health log (`HealthLogSection`), seasonal advice (`SeasonalAdviceSection`), push reminders, marketplace listing modal, "Mark as Dead" modal, social section (`PlantSocialSection`), watering section (`WateringSection`); reads `ai_provider` from AsyncStorage for per-provider cache and provider badge; calls `runGamification()` on collection add, photo upload, diagnosis, and listing create
   - `settings.tsx` — profile quick-access card; APPEARANCE (light/dark/auto theme); REMINDERS; AI PROVIDER; ACCOUNT (Edit Profile, Log out, Delete Account); DATA (Clear Cache, Export Collection CSV, Clear all data); ABOUT; web-only back button
-  - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Suggested Users section; Following Activity feed; debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
+  - `discover.tsx` — Trending Plants horizontal scroll (via `get_trending_plants` RPC); Suggested Users section; Following Activity feed; Marketplace preview (`getActiveListings`); Plant of the Week nominations + voting (`potwLogic.ts`); debounced username search; navigates to publicProfile or PlantDetailsAiGenerated
   - `publicProfile.tsx` — public view of another user's profile and collection; follow/unfollow button
   - `compare.tsx` — side-by-side plant comparison; two text inputs → calls `compareLogic.comparePlants`; shows summary, category rows (label / plantA value / plantB value), and a verdict; "Compare again" / "Try again" resets the form
   - `leaderboard.tsx` — ranked list from `leaderboard` Supabase table; shows avatar, username, score, collection count, streak, badge count; own row is highlighted
@@ -376,8 +359,6 @@ ALLOWED_ORIGIN=...          # CORS origin (defaults to http://localhost:8081)
   - `publicPlantDetail.tsx` — read-only care tips view for a plant on another user's public profile
 - `constants/` — static data and theme: `plants.ts` (PLANT_SUGGESTIONS, RANDOM_PLANTS), `theme.ts`
 - `styles/` — separated StyleSheet files for larger screens
-- `api/openai.ts`, `api/qwenai.ts` — unused/experimental, not wired into the app
-
 ## Testing
 
 All test files are in `__tests__/`. Run a single file: `npm test -- --testPathPattern=<name>`.
@@ -422,11 +403,3 @@ All Supabase-backed tests share a `mockQuery` / `makeChain` helper: a chainable 
 
 AsyncStorage is mocked via `@react-native-async-storage/async-storage/jest/async-storage-mock` in all tests that need it.
 
-## Docker
-
-```bash
-docker build -t ai-plantz .
-docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 ai-plantz
-```
-
-Runs `expo start --tunnel` for remote development.

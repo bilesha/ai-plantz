@@ -91,7 +91,7 @@ export default function AuthScreen() {
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={s.appName}>LeafyAI</Text>
+        <Text style={s.appName}>Rootnote</Text>
         <Text style={s.tagline}>Your AI Botanical Assistant</Text>
 
         <View style={s.toggle}>

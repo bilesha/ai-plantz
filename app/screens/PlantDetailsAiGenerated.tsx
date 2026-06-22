@@ -212,7 +212,7 @@ export default function PlantDetailsAiGenerated() {
           '',
           `🌱 Fertilizer\n${details.fertilizer}`,
           '',
-          'Shared from LeafyAI',
+          'Shared from Rootnote',
         ].join('\n'),
       });
     } catch {}
@@ -291,7 +291,7 @@ export default function PlantDetailsAiGenerated() {
     if (status === 'undetermined') {
       Alert.alert(
         'Allow Notifications',
-        `LeafyAI will remind you to water your ${safePlantName} every ${days} days.`,
+        `Rootnote will remind you to water your ${safePlantName} every ${days} days.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Continue', onPress: () => confirmSetReminder(days) },

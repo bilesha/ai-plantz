@@ -160,7 +160,7 @@ export default function PlantChatSection({ plantName }: Props) {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Text style={s.sectionLabel}>ASK LEAFYAI</Text>
+        <Text style={s.sectionLabel}>ASK ROOTNOTE</Text>
         <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={s.clearBtn}>Clear</Text>
         </TouchableOpacity>

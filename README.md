@@ -1,4 +1,4 @@
-# ai-plantz
+# rootnote
 
 A cross-platform botanical assistant app built with React Native/Expo. Search for any plant and get AI-generated care tips powered by five selectable AI providers, with a watering scheduler, plant photo gallery, AI diagnosis, persistent plant chat, gamification (streaks, badges, leaderboard), social features, a marketplace, and full cloud sync via Supabase.
 
@@ -15,12 +15,14 @@ A cross-platform botanical assistant app built with React Native/Expo. Search fo
 - **AI watering suggestions** — tap "AI Suggest" in the schedule modal to get a recommended interval for your specific plant from Claude Haiku
 - **Watering reminders** — schedule push notifications at 3, 7, 14, or 30-day intervals (iOS and Android; hidden on web)
 - **Gamification** — earn badges (First Plant, Collector, Green Thumb, Photographer, Plant Doctor, Social Butterfly, streak badges), track daily activity streaks, and climb the global leaderboard (score = collection×10 + streak×5 + badges×20)
-- **Seasonal advice** — care tips adapted to the user's current season and local weather (location-aware)
-- **Health log** — track plant health status over time with a per-plant log
-- **Marketplace** — list plants for trade, gift, or sale; browse active listings
+- **Seasonal advice** — care tips adapted to the user's current season and local weather (location-aware via `EXPO_PUBLIC_OPENWEATHER_API_KEY`)
+- **Health log** — track plant health status over time with a per-plant log, with comments on each entry
+- **Marketplace** — list plants for trade, gift, or sale; browse active listings; previewed on Discover
+- **Plant of the Week** — nominate a plant and vote on others' nominations each week; ranked by vote count on Discover
 - **Death log** — record plants that have died with cause and notes (plant graveyard)
 - **Social** — like and comment on plants, follow other users, view follower/following lists, see a following activity feed, and view public profiles
-- **Discover** — trending plants (by collection count), suggested users to follow, debounced username search, following activity feed
+- **Discover** — trending plants (by collection count), suggested users to follow, debounced username search, following activity feed, marketplace preview, Plant of the Week nominations
+- **Notifications** — in-app notification list and unread badge (rows are populated by a Supabase trigger on social activity, not by the app itself)
 - **Search history** — full browsing history with favourite toggling, search, and rich empty states
 - **Light / dark / auto theme** — persisted preference via ThemeContext + AsyncStorage
 - **Cloud sync** — all data stored in Supabase with RLS; unauthenticated users fall back to AsyncStorage
@@ -45,6 +47,7 @@ A cross-platform botanical assistant app built with React Native/Expo. Search fo
 - A [Supabase](https://supabase.com) project
 - API keys for at least one AI provider (Gemini recommended for the backend)
 - An [Anthropic API key](https://console.anthropic.com) for AI watering suggestions (optional — falls back to 7 days)
+- An [OpenWeatherMap API key](https://openweathermap.org/api) for weather-aware seasonal advice (optional — feature is skipped without it)
 
 ## Getting Started
 
@@ -52,7 +55,7 @@ A cross-platform botanical assistant app built with React Native/Expo. Search fo
 
 ```bash
 git clone <repo-url>
-cd ai-plantz
+cd rootnote
 npm install
 cd backend && npm install && cd ..
 ```
@@ -66,6 +69,7 @@ EXPO_PUBLIC_API_URL=http://localhost:5000
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 EXPO_PUBLIC_ANTHROPIC_API_KEY=your_anthropic_key   # optional — powers AI watering suggestions
+EXPO_PUBLIC_OPENWEATHER_API_KEY=your_openweather_key  # optional — powers weather-aware seasonal advice
 ```
 
 **Backend** — create `backend/.env`:
@@ -78,6 +82,7 @@ QWEN_API_KEY=your_qwen_key          # optional
 MOONSHOT_API_KEY=your_moonshot_key  # optional
 PORT=5000
 ALLOWED_ORIGIN=http://localhost:8081
+MOCK_MODE=false              # set to true to disable AI calls and return fixed mock responses (see Mock mode below)
 ```
 
 ### 3. Set up Supabase
@@ -267,6 +272,93 @@ alter table plant_death_log enable row level security;
 create policy "own rows only" on plant_death_log for all using (auth.uid() = user_id);
 ```
 
+Also create the health log, social, notifications, and Plant of the Week tables:
+
+```sql
+-- Health log (column is singular `note`, not `status`/`notes`)
+create table plant_health_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  note text not null,
+  logged_at timestamptz default now()
+);
+alter table plant_health_log enable row level security;
+create policy "own rows only" on plant_health_log for all using (auth.uid() = user_id);
+
+create table health_log_comments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  health_log_id uuid references plant_health_log(id) on delete cascade not null,
+  body text not null,
+  created_at timestamptz default now()
+);
+alter table health_log_comments enable row level security;
+create policy "own rows only" on health_log_comments for all using (auth.uid() = user_id);
+create policy "public read" on health_log_comments for select using (true);
+
+-- Social: likes + comments
+create table plant_likes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_owner_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  created_at timestamptz default now(),
+  constraint plant_likes_unique unique (user_id, plant_owner_id, plant_name)
+);
+alter table plant_likes enable row level security;
+create policy "own rows only" on plant_likes for all using (auth.uid() = user_id);
+create policy "public read" on plant_likes for select using (true);
+
+create table plant_comments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_owner_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  body text not null,
+  created_at timestamptz default now()
+);
+alter table plant_comments enable row level security;
+create policy "own rows only" on plant_comments for all using (auth.uid() = user_id);
+create policy "public read" on plant_comments for select using (true);
+
+-- In-app notifications — rows must be inserted by a trigger/function on follows/likes/comments
+-- (not included here); without one, the notifications screen stays empty.
+create table notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  actor_id uuid references auth.users(id) on delete cascade not null,
+  type text not null,
+  read boolean default false,
+  created_at timestamptz default now()
+);
+alter table notifications enable row level security;
+create policy "own rows only" on notifications for all using (auth.uid() = user_id);
+
+-- Plant of the Week
+create table potw_nominations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  plant_name text not null,
+  reason text,
+  week_start date not null
+);
+alter table potw_nominations enable row level security;
+create policy "own rows only" on potw_nominations for all using (auth.uid() = user_id);
+create policy "public read" on potw_nominations for select using (true);
+
+create table potw_votes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  nomination_id uuid references potw_nominations(id) on delete cascade not null,
+  week_start date not null,
+  constraint potw_votes_unique unique (user_id, nomination_id)
+);
+alter table potw_votes enable row level security;
+create policy "own rows only" on potw_votes for all using (auth.uid() = user_id);
+create policy "public read" on potw_votes for select using (true);
+```
+
 If upgrading an existing database:
 
 ```sql
@@ -275,6 +367,9 @@ ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS amount_ml integer;
 ALTER TABLE watering_log ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS watering_interval_days integer;
 ALTER TABLE plant_collection ADD COLUMN IF NOT EXISTS next_watering_date timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS longitude double precision;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS location_updated_at timestamptz;
 ```
 
 Create two Supabase Storage buckets: `plant-photos` and `avatars` (both public).
@@ -316,7 +411,7 @@ The deployed backend sleeps after inactivity. Always run the backend locally for
 ## Project Structure
 
 ```
-ai-plantz/
+rootnote/
 ├── app/
 │   ├── _layout.tsx                       # Root layout — ThemeProvider, ToastProvider, auth listener, notification channel
 │   ├── index.tsx                         # Home / search screen
@@ -324,7 +419,7 @@ ai-plantz/
 │       ├── PlantDetailsAiGenerated.tsx   # Care tips, photos, diagnosis, chat, collection, gamification, watering, social
 │       ├── collection.tsx                # Collection with status filter, 💧 overdue badge
 │       ├── history.tsx                   # Search history with favourites filter
-│       ├── discover.tsx                  # Trending plants, suggested users, activity feed, user search
+│       ├── discover.tsx                  # Trending plants, suggested users, activity feed, marketplace preview, Plant of the Week, user search
 │       ├── profile.tsx                   # Own profile — stats, streaks, badges, collection, follow counts
 │       ├── publicProfile.tsx             # Another user's public profile + follow button
 │       ├── publicPlantDetail.tsx         # Read-only care tips from a public profile
@@ -392,6 +487,8 @@ ai-plantz/
 ```
 
 ## Backend API
+
+When `MOCK_MODE=true` (`backend/.env`), every endpoint below except `/health` skips the AI provider call and returns a fixed mock response instantly — see [Mock mode for automated testing](#mock-mode-for-automated-testing).
 
 ### `GET /health`
 
@@ -507,8 +604,8 @@ Never place `testID` on `Animated.View` — it does not render to the DOM reliab
 ## Docker
 
 ```bash
-docker build -t ai-plantz .
-docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 ai-plantz
+docker build -t rootnote .
+docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 rootnote
 ```
 
 ## Notes
@@ -520,3 +617,5 @@ docker run -p 19000:19000 -p 19001:19001 -p 19002:19002 ai-plantz
 - Wikipedia thumbnails use a three-state cache: `undefined` = not fetched, `null` = no image available, string = cached URL.
 - **Gamification** is wired into `PlantDetailsAiGenerated` — `recordActivity`, `checkAndAwardBadges`, and `updateLeaderboard` run fire-and-forget after adding to collection, uploading a photo, completing a diagnosis, and creating a marketplace listing.
 - **Plant photos** are stored in the `plant-photos` Supabase Storage bucket. The first photo uploaded for a plant is automatically set as primary and its URL is back-filled into `plant_collection.photo_url`.
+- **Notifications are read-only from the app.** `notificationLogic.ts` never inserts into the `notifications` table — rows must come from a Supabase trigger/function on `follows` / `plant_likes` / `plant_comments` inserts. Without that trigger configured, the notifications screen and unread badge stay empty.
+- **Seasonal advice** falls back gracefully without location/weather data: `getCurrentWeather` returns `null` if `EXPO_PUBLIC_OPENWEATHER_API_KEY` is unset or the request fails, and `requestAndSaveLocation` returns `null` if location permission is denied.

@@ -2,9 +2,9 @@ import 'dotenv/config';
 
 export default {
   expo: {
-    name: "ai-plantz",
-    slug: "ai-plantz",
-    scheme: "ai-plantz",
+    name: "Rootnote",
+    slug: "rootnote",
+    scheme: "rootnote",
     version: "1.0.0",
     userInterfaceStyle: "automatic",
     splash: {

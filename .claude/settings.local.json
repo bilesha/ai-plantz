@@ -39,7 +39,9 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest',{}\\),indent=2\\)\\)\")",
       "Bash(npm ls *)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d,indent=2\\)\\)\")",
-      "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); import json; cfg=json.loads\\(d[d.find\\('{'\\):]\\) if '{' in d else {}; [print\\(k,':',v\\) for k,v in cfg.get\\('configs',[{}]\\)[0].items\\(\\) if k in ['preset','setupFiles','setupFilesAfterFramework','setupFilesAfterEach','testEnvironment','transform','moduleNameMapper']]\")"
+      "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); import json; cfg=json.loads\\(d[d.find\\('{'\\):]\\) if '{' in d else {}; [print\\(k,':',v\\) for k,v in cfg.get\\('configs',[{}]\\)[0].items\\(\\) if k in ['preset','setupFiles','setupFilesAfterFramework','setupFilesAfterEach','testEnvironment','transform','moduleNameMapper']]\")",
+      "Bash(sed -E \"s/.*\\\\.from\\\\\\('\\([a-z_]*\\)'\\\\\\).*/\\\\1/\")",
+      "PowerShell(\\(Get-Content \"F:\\\\Code\\\\React\\\\ai-plantz\\\\CLAUDE.md\" -Raw\\).Length)"
     ]
   }
 }

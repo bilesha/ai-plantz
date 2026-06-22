@@ -24,7 +24,7 @@ import { PlantEntry } from "../types";
 const TOUR_STEPS = [
   {
     icon: '🌿',
-    title: 'Welcome to LeafyAI',
+    title: 'Welcome to Rootnote',
     body: 'Search for any plant and get instant AI-powered care tips. Tap the Plant of the Day to get started.',
   },
   {
@@ -173,7 +173,7 @@ export default function Index() {
     <ScreenLayout>
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       <View style={s.header}>
-        <Text style={s.title}>🌿 LeafyAI</Text>
+        <Text style={s.title}>🌿 Rootnote</Text>
         <Text style={s.subtitle}>Your AI Botanical Assistant</Text>
       </View>
 

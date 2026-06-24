@@ -58,7 +58,7 @@ const PORT = Number(process.env.PORT) || 5000;
 
 // --- Provider clients ---
 
-const geminiModel = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({
+const geminiModel = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "").getGenerativeModel({
   model: "gemini-2.0-flash",
 });
 

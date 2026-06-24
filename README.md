@@ -1,10 +1,10 @@
 # rootnote
 
-A cross-platform botanical assistant app built with React Native/Expo. Search for any plant and get AI-generated care tips powered by five selectable AI providers, with a watering scheduler, plant photo gallery, AI diagnosis, persistent plant chat, gamification (streaks, badges, leaderboard), social features, a marketplace, and full cloud sync via Supabase.
+A cross-platform botanical assistant app built with React Native/Expo. The app opens on **Discover** (trending plants, social feed, marketplace, Plant of the Week); the **AI Assistant** tab is where you search any plant for care tips powered by five selectable AI providers. Also includes a watering scheduler, plant photo gallery, AI diagnosis, persistent plant chat, gamification (streaks, badges, leaderboard), social features, and full cloud sync via Supabase.
 
 ## Features
 
-- **AI plant care tips** — search any plant and get a summary plus 11 structured care fields (watering, light, fertilizer, care level, toxicity, fun fact, seasonal care, compatibility, propagation, pairing plants, troubleshooting)
+- **AI plant care tips** — search any plant in the AI Assistant tab and get a summary plus 11 structured care fields (watering, light, fertilizer, care level, toxicity, fun fact, seasonal care, compatibility, propagation, pairing plants, troubleshooting)
 - **Multi-provider AI** — switch between Gemini, Groq, DeepSeek, Qwen, and Moonshot in Settings; each provider's tips are cached independently
 - **Plant collection** — mark plants as _Own it_, _Want it_, or _Tried it_; add ratings (1–5 stars), personal notes, and a full photo gallery
 - **Multiple photos** — upload, caption, delete, and set a primary photo per plant; primary syncs back to the collection card thumbnail
@@ -21,7 +21,8 @@ A cross-platform botanical assistant app built with React Native/Expo. Search fo
 - **Plant of the Week** — nominate a plant and vote on others' nominations each week; ranked by vote count on Discover
 - **Death log** — record plants that have died with cause and notes (plant graveyard)
 - **Social** — like and comment on plants, follow other users, view follower/following lists, see a following activity feed, and view public profiles
-- **Discover** — trending plants (by collection count), suggested users to follow, debounced username search, following activity feed, marketplace preview, Plant of the Week nominations
+- **Discover** — the home/opening screen; trending plants (by collection count), suggested users to follow, debounced username search, following activity feed, marketplace preview, Plant of the Week nominations
+- **AI Assistant** — dedicated tab for AI plant search: enter any plant name (or tap Plant of the Day / Random) to get a summary and 11 structured care fields; recent searches shown as dismissible chips
 - **Notifications** — in-app notification list and unread badge (rows are populated by a Supabase trigger on social activity, not by the app itself)
 - **Search history** — full browsing history with favourite toggling, search, and rich empty states
 - **Light / dark / auto theme** — persisted preference via ThemeContext + AsyncStorage
@@ -414,12 +415,12 @@ The deployed backend sleeps after inactivity. Always run the backend locally for
 rootnote/
 ├── app/
 │   ├── _layout.tsx                       # Root layout — ThemeProvider, ToastProvider, auth listener, notification channel
-│   ├── index.tsx                         # Home / search screen
+│   ├── index.tsx                         # Discover screen (default tab — trending plants, user/plant search, marketplace, Plant of the Week, activity feed)
 │   └── screens/
+│       ├── aiAssistant.tsx               # AI Assistant tab — plant search, care tips preview, Plant of the Day, recent searches
 │       ├── PlantDetailsAiGenerated.tsx   # Care tips, photos, diagnosis, chat, collection, gamification, watering, social
 │       ├── collection.tsx                # Collection with status filter, 💧 overdue badge
 │       ├── history.tsx                   # Search history with favourites filter
-│       ├── discover.tsx                  # Trending plants, suggested users, activity feed, marketplace preview, Plant of the Week, user search
 │       ├── profile.tsx                   # Own profile — stats, streaks, badges, collection, follow counts
 │       ├── publicProfile.tsx             # Another user's public profile + follow button
 │       ├── publicPlantDetail.tsx         # Read-only care tips from a public profile

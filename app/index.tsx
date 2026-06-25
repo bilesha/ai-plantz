@@ -67,6 +67,7 @@ import {
   voteForNomination,
   type PotWNomination,
 } from '../logic/potwLogic';
+import { searchPlants } from '../utilities/fetchPlantSearch';
 
 type ProfileResult = {
   id: string;
@@ -90,7 +91,10 @@ type SuggestedUser = {
 };
 
 type PlantResult = {
-  plant_name: string;
+  id: number;
+  commonName: string | null;
+  scientificName: string;
+  imageUrl: string | null;
 };
 
 async function getTrendingPlants(): Promise<TrendingPlant[]> {
@@ -133,6 +137,26 @@ const avatarStyles = (t: Theme) => StyleSheet.create({
   placeholder: { backgroundColor: t.accent, justifyContent: 'center', alignItems: 'center' },
   initials:    { fontWeight: '900', color: '#fff' },
 });
+
+function PlantResultIcon({ imageUrl, theme }: { imageUrl: string | null; theme: Theme }) {
+  const [errored, setErrored] = useState(false);
+  const s = useMemo(() => styles(theme), [theme]);
+
+  if (imageUrl && !errored) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={{ width: 44, height: 44, borderRadius: 22 }}
+        onError={() => setErrored(true)}
+      />
+    );
+  }
+  return (
+    <View style={s.plantResultIcon}>
+      <Text style={s.plantResultEmoji}>🌿</Text>
+    </View>
+  );
+}
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -245,18 +269,14 @@ export default function DiscoverScreen() {
           setResults((data ?? []) as ProfileResult[]);
           setPlantResults([]);
         } else {
-          const { data } = await supabase
-            .from('plant_collection')
-            .select('plant_name')
-            .ilike('plant_name', `%${trimmed}%`)
-            .limit(50);
+          const { results } = await searchPlants(trimmed);
           const seen = new Set<string>();
           const unique: PlantResult[] = [];
-          for (const row of (data ?? []) as any[]) {
-            const key = (row.plant_name as string).toLowerCase();
+          for (const item of results) {
+            const key = item.scientificName.toLowerCase();
             if (!seen.has(key)) {
               seen.add(key);
-              unique.push({ plant_name: row.plant_name });
+              unique.push(item);
             }
             if (unique.length === 8) break;
           }
@@ -379,6 +399,12 @@ export default function DiscoverScreen() {
         <View style={s.emptyState}>
           <Text style={s.emptyIcon}>🔍</Text>
           <Text style={s.emptyText}>No plants found for "{query.trim()}".</Text>
+          <TouchableOpacity
+            style={s.aiSearchBtn}
+            onPress={() => router.push({ pathname: '/screens/aiAssistant', params: { plantName: query.trim() } })}
+          >
+            <Text style={s.aiSearchBtnText}>Don't see it? Search with AI instead</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -409,19 +435,20 @@ export default function DiscoverScreen() {
         <View style={s.resultsList}>
           {plantResults.map((item, i) => (
             <TouchableOpacity
-              key={item.plant_name}
+              key={item.id}
               style={[s.resultRow, i < plantResults.length - 1 && s.resultBorder]}
               onPress={() => router.push({
                 pathname: '/screens/PlantDetailsAiGenerated',
-                params: { plantName: item.plant_name },
+                params: { plantName: item.commonName ?? item.scientificName },
               })}
               activeOpacity={0.7}
             >
-              <View style={s.plantResultIcon}>
-                <Text style={s.plantResultEmoji}>🌿</Text>
-              </View>
+              <PlantResultIcon imageUrl={item.imageUrl} theme={theme} />
               <View style={s.resultText}>
-                <Text style={s.resultName}>{item.plant_name}</Text>
+                <Text style={s.resultName}>{item.commonName ?? item.scientificName}</Text>
+                {item.commonName && item.commonName !== item.scientificName && (
+                  <Text style={s.plantResultSci} numberOfLines={1}>{item.scientificName}</Text>
+                )}
               </View>
               <Text style={s.chevron}>›</Text>
             </TouchableOpacity>
@@ -793,6 +820,10 @@ const styles = (t: Theme) => StyleSheet.create({
 
   plantResultIcon:  { width: 44, height: 44, borderRadius: 22, backgroundColor: t.surfaceGreenSubtle, justifyContent: 'center', alignItems: 'center' },
   plantResultEmoji: { fontSize: 20 },
+  plantResultSci:   { fontSize: 13, color: t.textSecondary, marginTop: 2 },
+
+  aiSearchBtn:      { marginTop: 16, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100, borderWidth: 1.5, borderColor: t.accent, backgroundColor: t.surfaceGreenSubtle },
+  aiSearchBtnText:  { color: t.accentDark, fontWeight: '700' as const, fontSize: 13 },
 
   resultsList:  { backgroundColor: t.surface, borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   resultRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },

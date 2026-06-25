@@ -16,6 +16,14 @@ if (MOCK_MODE) {
   process.exit(1);
 }
 
+const MOCK_PLANT_SEARCH_RESPONSE = {
+  results: [
+    { id: 1, commonName: "Mock Fern", scientificName: "Filicum mockus", imageUrl: null },
+    { id: 2, commonName: "Test Succulent", scientificName: "Succula testus", imageUrl: null },
+    { id: 3, commonName: null, scientificName: "Plantae fictus", imageUrl: null },
+  ],
+};
+
 const MOCK_DIAGNOSIS_RESPONSE = {
   healthy: false,
   issues: ["Yellowing leaves", "Brown leaf tips"],
@@ -555,6 +563,64 @@ app.post(
     } catch (error) {
       console.error("Plant compare error:", error);
       res.status(500).json({ error: "Failed to compare plants." });
+    }
+  }
+);
+
+// --- Plant search endpoint (Trefle) ---
+
+type TreflePlant = {
+  id: number;
+  common_name: string | null;
+  scientific_name: string;
+  image_url: string | null;
+};
+
+app.get(
+  "/api/plant-search",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_PLANT_SEARCH_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!q) {
+      return res.status(400).json({ error: "q query parameter is required" });
+    }
+
+    const trefleKey = process.env.TREFLE_API_KEY;
+    if (!trefleKey) {
+      return res.status(503).json({ error: "Plant search is not configured on this server" });
+    }
+
+    try {
+      const url = `https://trefle.io/api/v1/plants/search?token=${trefleKey}&q=${encodeURIComponent(q)}`;
+
+      const trefleData = await withTimeout(
+        fetch(url).then(async (r) => {
+          if (!r.ok) {
+            const body = await r.text().catch(() => "");
+            throw new Error(`Trefle API error ${r.status}: ${body}`);
+          }
+          const json = (await r.json()) as { data?: TreflePlant[] };
+          return json.data ?? [];
+        }),
+        10_000,
+        "Trefle"
+      );
+
+      const results = trefleData.map((p) => ({
+        id: p.id,
+        commonName: p.common_name,
+        scientificName: p.scientific_name,
+        imageUrl: p.image_url,
+      }));
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Trefle search error:", error);
+      res.status(502).json({ error: "Failed to fetch plant data from search service." });
     }
   }
 );

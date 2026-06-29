@@ -50,6 +50,7 @@ function makeChain(result: { data?: any; error?: any; count?: number | null } = 
 const PRODUCT_FIXTURE: FertilizerProduct = {
   id:                 'prod-1',
   name:               'GrowMaster',
+  type:               'liquid concentrate',
   manufacturer_ratio: '1 tsp per gallon',
   notes:              null,
   created_at:         '2026-06-01T10:00:00Z',

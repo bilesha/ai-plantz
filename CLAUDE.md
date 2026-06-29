@@ -85,7 +85,7 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 | `user_streaks` | `user_id`, `current_streak`, `longest_streak`, `last_activity_date` | `logic/gamificationLogic.ts` |
 | `user_badges` | `user_id`, `badge_key`, `earned_at`; unique on `(user_id, badge_key)` | `logic/gamificationLogic.ts` |
 | `leaderboard` | `user_id`, `username`, `avatar_url`, `collection_count`, `streak`, `badge_count`, `score`, `updated_at` | `logic/gamificationLogic.ts` |
-| `fertilizer_products` | `user_id`, `name`, `manufacturer_ratio`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
+| `fertilizer_products` | `user_id`, `name`, `type`, `manufacturer_ratio`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
 | `fertilizer_recipes` | `user_id`, `name`, `instructions`, `applies_to`, `application_method`, `frequency`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
 | `fertilizer_recipe_products` | `recipe_id` (→ `fertilizer_recipes.id`), `product_id` (→ `fertilizer_products.id`, on delete set null), `amount`; RLS via parent recipe | `logic/fertilizerLogic.ts` |
 

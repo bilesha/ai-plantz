@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 export type FertilizerProduct = {
   id: string;
   name: string;
+  type: string | null;
   manufacturer_ratio: string | null;
   notes: string | null;
   created_at: string;

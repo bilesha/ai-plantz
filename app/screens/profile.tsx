@@ -278,6 +278,13 @@ export default function ProfileScreen() {
 
           {userId && <BadgesSection userId={userId} />}
 
+          <TouchableOpacity
+            style={s.fertilizerLink}
+            onPress={() => router.push('/screens/fertilizer')}
+          >
+            <Text style={s.fertilizerLinkText}>🌱 Fertilizer products & recipes</Text>
+          </TouchableOpacity>
+
           <View style={s.bioRow}>
             {profile?.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
             <TouchableOpacity testID="profile-edit-bio-button" onPress={() => { setDraftBio(profile?.bio ?? ''); setShowBioModal(true); }}>
@@ -398,6 +405,9 @@ const styles = (t: Theme) => StyleSheet.create({
   collectionStatPill:  { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 16, borderWidth: 1.5, backgroundColor: t.surface },
   collectionStatNum:   { fontSize: 18, fontWeight: '900' },
   collectionStatLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+
+  fertilizerLink:     { marginTop: 10, marginBottom: 2 },
+  fertilizerLinkText: { fontSize: 13, color: t.accent, fontWeight: '600' },
 
   bioRow:             { alignItems: 'center', marginBottom: 8 },
   bio:                { fontSize: 14, color: t.textSecondary, textAlign: 'center', lineHeight: 20, maxWidth: 280, marginBottom: 6 },

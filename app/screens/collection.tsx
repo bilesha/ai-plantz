@@ -280,6 +280,10 @@ export default function CollectionScreen() {
         </View>
       )}
 
+      <TouchableOpacity style={s.fertilizerLink} onPress={() => router.push('/screens/fertilizer')}>
+        <Text style={s.fertilizerLinkText}>🌱 Fertilizer products & recipes →</Text>
+      </TouchableOpacity>
+
       {filtered.length === 0 ? (
         collection.length === 0 ? (
           <View style={s.emptyState}>
@@ -353,4 +357,6 @@ const styles = (t: ReturnType<typeof useTheme>) => StyleSheet.create({
   wateringPillText:    { fontSize: 12, fontWeight: '700', color: '#fff' },
   wateringViewAll:     { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'flex-end' as const },
   wateringViewAllText: { fontSize: 13, fontWeight: '700', color: t.accent },
+  fertilizerLink:     { paddingVertical: 10, paddingHorizontal: 4, alignSelf: 'flex-start' },
+  fertilizerLinkText: { fontSize: 13, fontWeight: '700', color: t.accent },
 });

@@ -516,6 +516,20 @@ export default function DiscoverScreen() {
             <Text style={s.compareCardChevron}>›</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            testID="fertilizer-card"
+            style={s.compareCard}
+            onPress={() => router.push('/screens/fertilizer')}
+            activeOpacity={0.8}
+          >
+            <Text style={s.compareCardIcon}>🌱</Text>
+            <View style={s.compareCardText}>
+              <Text style={s.compareCardTitle}>Fertilizer</Text>
+              <Text style={s.compareCardSub}>Track your products and recipes</Text>
+            </View>
+            <Text style={s.compareCardChevron}>›</Text>
+          </TouchableOpacity>
+
           {(marketplaceLoading || marketplace.length > 0) && (
             <View testID="marketplace-section" style={s.marketplaceSection}>
               <Text style={s.marketplaceHeading}>MARKETPLACE 🌿</Text>

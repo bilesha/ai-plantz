@@ -92,7 +92,7 @@ export default function LeaderboardScreen() {
     const medal = RANK_MEDALS[rank];
 
     return (
-      <View style={[s.row, isMe && s.rowMe, index > 0 && s.rowBorder]}>
+      <View testID={`leaderboard-row-${item.user_id}`} style={[s.row, isMe && s.rowMe, index > 0 && s.rowBorder]}>
         <View style={s.rankBox}>
           {medal
             ? <Text style={s.medal}>{medal}</Text>
@@ -116,30 +116,31 @@ export default function LeaderboardScreen() {
   return (
     <View style={s.root}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity testID="leaderboard-back-button" onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={s.backArrow}>‹</Text>
         </TouchableOpacity>
         <Text style={s.title}>Leaderboard</Text>
       </View>
 
       {loading ? (
-        <View style={s.centered}>
+        <View testID="leaderboard-loading" style={s.centered}>
           <ActivityIndicator size="large" color={theme.accent} />
         </View>
       ) : rows.length === 0 ? (
-        <View style={s.centered}>
+        <View testID="leaderboard-empty" style={s.centered}>
           <Text style={s.emptyIcon}>🏆</Text>
           <Text style={s.emptyText}>No scores yet. Be the first!</Text>
         </View>
       ) : (
         <FlatList
+          testID="leaderboard-list"
           data={rows}
           keyExtractor={item => item.user_id}
           renderItem={renderItem}
           contentContainerStyle={s.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.accent} />}
           ListHeaderComponent={
-            <View style={s.scoreKey}>
+            <View testID="leaderboard-score-key" style={s.scoreKey}>
               <Text style={s.scoreKeyText}>Score = 🪴×10 + 🔥×5 + 🏅×20</Text>
             </View>
           }

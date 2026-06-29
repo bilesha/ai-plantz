@@ -53,7 +53,7 @@ export default function CompareScreen() {
     <View style={s.root}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity testID="compare-back-button" onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={s.backArrow}>‹</Text>
         </TouchableOpacity>
         <Text style={s.title}>Compare Plants</Text>
@@ -69,6 +69,7 @@ export default function CompareScreen() {
         <View style={s.inputsCard}>
           <Text style={s.inputLabel}>PLANT A</Text>
           <TextInput
+            testID="compare-plant-a-input"
             style={s.input}
             value={plantA}
             onChangeText={setPlantA}
@@ -88,6 +89,7 @@ export default function CompareScreen() {
 
           <Text style={s.inputLabel}>PLANT B</Text>
           <TextInput
+            testID="compare-plant-b-input"
             ref={inputBRef}
             style={s.input}
             value={plantB}
@@ -103,6 +105,7 @@ export default function CompareScreen() {
 
         {!result && (
           <TouchableOpacity
+            testID="compare-submit-button"
             style={[s.compareBtn, (!canCompare || loading) && s.compareBtnDisabled]}
             onPress={handleCompare}
             disabled={!canCompare || loading}
@@ -116,9 +119,9 @@ export default function CompareScreen() {
         )}
 
         {!!error && (
-          <View style={s.errorBox}>
+          <View testID="compare-error-box" style={s.errorBox}>
             <Text style={s.errorText}>{error}</Text>
-            <TouchableOpacity onPress={handleReset} style={s.tryAgainBtn}>
+            <TouchableOpacity testID="compare-try-again-button" onPress={handleReset} style={s.tryAgainBtn}>
               <Text style={s.tryAgainText}>Try again</Text>
             </TouchableOpacity>
           </View>
@@ -128,7 +131,7 @@ export default function CompareScreen() {
         {result && (
           <>
             {/* Summary */}
-            <View style={s.summaryCard}>
+            <View testID="compare-summary-card" style={s.summaryCard}>
               <Text style={s.summaryText}>{result.summary}</Text>
             </View>
 
@@ -145,7 +148,7 @@ export default function CompareScreen() {
 
             {/* Category rows */}
             {result.categories.map((cat, i) => (
-              <View key={cat.label} style={[s.catRow, i % 2 === 1 && s.catRowAlt]}>
+              <View key={cat.label} testID={`compare-category-row-${cat.label}`} style={[s.catRow, i % 2 === 1 && s.catRowAlt]}>
                 <Text style={s.catLabel}>{cat.label}</Text>
                 <Text style={s.catValueA}>{cat.plantA}</Text>
                 <Text style={s.catValueB}>{cat.plantB}</Text>
@@ -153,12 +156,12 @@ export default function CompareScreen() {
             ))}
 
             {/* Verdict */}
-            <View style={s.verdictCard}>
+            <View testID="compare-verdict-card" style={s.verdictCard}>
               <Text style={s.verdictHeading}>VERDICT</Text>
               <Text style={s.verdictText}>{result.verdict}</Text>
             </View>
 
-            <TouchableOpacity style={s.resetBtn} onPress={handleReset}>
+            <TouchableOpacity testID="compare-reset-button" style={s.resetBtn} onPress={handleReset}>
               <Text style={s.resetBtnText}>Compare again</Text>
             </TouchableOpacity>
           </>

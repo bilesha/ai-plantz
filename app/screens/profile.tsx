@@ -164,7 +164,7 @@ export default function ProfileScreen() {
       <ScreenLayout>
         <View style={s.centered}>
           <Text style={s.errorText}>{error}</Text>
-          <TouchableOpacity onPress={loadProfile} style={s.retryBtn}>
+          <TouchableOpacity testID="profile-retry-button" onPress={loadProfile} style={s.retryBtn}>
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -178,6 +178,7 @@ export default function ProfileScreen() {
         <View style={s.headerRow}>
           <Text style={s.title}>Profile</Text>
           <TouchableOpacity
+            testID="profile-notifications-button"
             style={s.bellBtn}
             onPress={() => router.push('/screens/notifications')}
           >
@@ -191,7 +192,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={s.avatarSection}>
-          <TouchableOpacity onPress={handlePickAvatar} disabled={avatarUploading} style={s.avatarWrapper}>
+          <TouchableOpacity testID="profile-avatar-button" onPress={handlePickAvatar} disabled={avatarUploading} style={s.avatarWrapper}>
             {showImage ? (
               <Image
                 source={{ uri: profile!.avatar_url! }}
@@ -222,6 +223,7 @@ export default function ProfileScreen() {
 
           <View style={s.statsRow}>
             <TouchableOpacity
+              testID="profile-followers-button"
               style={s.statItem}
               onPress={() => userId && router.push({
                 pathname: '/screens/followersList',
@@ -233,6 +235,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <View style={s.statDivider} />
             <TouchableOpacity
+              testID="profile-following-button"
               style={s.statItem}
               onPress={() => userId && router.push({
                 pathname: '/screens/followersList',
@@ -243,31 +246,31 @@ export default function ProfileScreen() {
               <Text style={s.statLabel}>Following</Text>
             </TouchableOpacity>
             <View style={s.statDivider} />
-            <View style={s.statItem}>
+            <View testID="profile-plants-stat" style={s.statItem}>
               <Text style={s.statCount}>{collection.length}</Text>
               <Text style={s.statLabel}>Plants</Text>
             </View>
             <View style={s.statDivider} />
-            <View style={s.statItem}>
+            <View testID="profile-likes-stat" style={s.statItem}>
               <Text style={s.statCount}>{likesReceived}</Text>
               <Text style={s.statLabel}>Likes</Text>
             </View>
           </View>
 
           <View style={s.collectionStatsRow}>
-            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.own }]}>
+            <View testID="profile-stat-owned" style={[s.collectionStatPill, { borderColor: STATUS_COLORS.own }]}>
               <Text style={[s.collectionStatNum, { color: STATUS_COLORS.own }]}>{collectionStats.own}</Text>
               <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.own }]}>🌿 Owned</Text>
             </View>
-            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.want }]}>
+            <View testID="profile-stat-wanted" style={[s.collectionStatPill, { borderColor: STATUS_COLORS.want }]}>
               <Text style={[s.collectionStatNum, { color: STATUS_COLORS.want }]}>{collectionStats.want}</Text>
               <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.want }]}>✨ Wanted</Text>
             </View>
-            <View style={[s.collectionStatPill, { borderColor: STATUS_COLORS.tried }]}>
+            <View testID="profile-stat-tried" style={[s.collectionStatPill, { borderColor: STATUS_COLORS.tried }]}>
               <Text style={[s.collectionStatNum, { color: STATUS_COLORS.tried }]}>{collectionStats.tried}</Text>
               <Text style={[s.collectionStatLabel, { color: STATUS_COLORS.tried }]}>🌱 Tried</Text>
             </View>
-            <View style={[s.collectionStatPill, { borderColor: '#ef4444' }]}>
+            <View testID="profile-stat-lost" style={[s.collectionStatPill, { borderColor: '#ef4444' }]}>
               <Text style={[s.collectionStatNum, { color: '#ef4444' }]}>{deathCount}</Text>
               <Text style={[s.collectionStatLabel, { color: '#ef4444' }]}>☠️ Lost</Text>
             </View>
@@ -277,12 +280,13 @@ export default function ProfileScreen() {
 
           <View style={s.bioRow}>
             {profile?.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
-            <TouchableOpacity onPress={() => { setDraftBio(profile?.bio ?? ''); setShowBioModal(true); }}>
+            <TouchableOpacity testID="profile-edit-bio-button" onPress={() => { setDraftBio(profile?.bio ?? ''); setShowBioModal(true); }}>
               <Text style={s.editBioLink}>{profile?.bio ? '✏ Edit bio' : '+ Add bio'}</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
+            testID="profile-edit-profile-button"
             style={s.editBtn}
             onPress={() => router.push('/screens/editProfile')}
             activeOpacity={0.85}
@@ -291,7 +295,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.sectionLabel}>COLLECTION</Text>
+        <Text testID="profile-collection-label" style={s.sectionLabel}>COLLECTION</Text>
 
         {collection.length === 0 ? (
           <View style={s.emptyCard}>
@@ -302,7 +306,7 @@ export default function ProfileScreen() {
             const group = collection.filter(e => e.status === status);
             if (group.length === 0) return null;
             return (
-              <View key={status} style={s.groupSection}>
+              <View key={status} testID={`profile-collection-group-${status}`} style={s.groupSection}>
                 <Text style={[s.groupLabel, { color: STATUS_COLORS[status] }]}>
                   {label.toUpperCase()} · {group.length}
                 </Text>
@@ -310,6 +314,7 @@ export default function ProfileScreen() {
                   {group.map((entry, i) => (
                     <View
                       key={entry.name}
+                      testID={`profile-plant-row-${entry.name}`}
                       style={[s.row, i < group.length - 1 && s.rowBorder]}
                     >
                       <Text style={s.plantName}>{entry.name}</Text>
@@ -327,11 +332,12 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={showBioModal} transparent animationType="fade">
+      <Modal testID="profile-bio-modal" visible={showBioModal} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>Edit Bio</Text>
             <TextInput
+              testID="profile-bio-input"
               style={s.bioInput}
               value={draftBio}
               onChangeText={t => setDraftBio(t.slice(0, 150))}
@@ -343,10 +349,10 @@ export default function ProfileScreen() {
             />
             <Text style={s.charCounter}>{draftBio.length}/150</Text>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setShowBioModal(false)}>
+              <TouchableOpacity testID="profile-bio-modal-cancel" style={s.modalCancel} onPress={() => setShowBioModal(false)}>
                 <Text style={s.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.modalSave} onPress={handleSaveBio}>
+              <TouchableOpacity testID="profile-bio-modal-save" style={s.modalSave} onPress={handleSaveBio}>
                 <Text style={s.modalSaveText}>Save</Text>
               </TouchableOpacity>
             </View>

@@ -342,11 +342,11 @@ export default function PlantDetailsAiGenerated() {
     <>
     <ScrollView style={d.container} contentContainerStyle={d.content}>
       <View style={d.topBar}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+        <TouchableOpacity testID="plant-details-back-button" onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <Text style={d.backText}>← Back to Search</Text>
         </TouchableOpacity>
         {details && (
-          <TouchableOpacity onPress={handleShare} style={d.shareBtn}>
+          <TouchableOpacity testID="plant-details-share-button" onPress={handleShare} style={d.shareBtn}>
             <Text style={d.shareBtnText}>Share</Text>
           </TouchableOpacity>
         )}
@@ -354,11 +354,11 @@ export default function PlantDetailsAiGenerated() {
 
       {imageUrl && (
         <Animated.View entering={FadeIn.duration(600)} style={d.heroWrapper}>
-          <Image source={{ uri: imageUrl }} style={d.heroImage} resizeMode="cover" />
+          <Image testID="plant-details-hero-image" source={{ uri: imageUrl }} style={d.heroImage} resizeMode="cover" />
         </Animated.View>
       )}
 
-      <Text style={d.headerTitle}>{safePlantName}</Text>
+      <Text testID="plant-details-title" style={d.headerTitle}>{safePlantName}</Text>
       <View style={d.divider} />
 
       <PlantPhotoGallery
@@ -383,7 +383,7 @@ export default function PlantDetailsAiGenerated() {
         <View style={d.errorContainer}>
           <Text style={d.errorIcon}>⚠️</Text>
           <Text style={d.errorText}>{error}</Text>
-          <TouchableOpacity style={d.retryButton} onPress={() => fetchDetails(safePlantName)}>
+          <TouchableOpacity testID="plant-details-retry-button" style={d.retryButton} onPress={() => fetchDetails(safePlantName)}>
             <Text style={d.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -396,7 +396,7 @@ export default function PlantDetailsAiGenerated() {
             if (!value) return null;
             const color = key === 'careLevel' ? (CARE_LEVEL_COLORS[value] ?? '#888') : undefined;
             return (
-              <Animated.View key={key} entering={FadeInDown.delay(i * 100).duration(400)} style={d.card}>
+              <Animated.View key={key} testID={`plant-details-card-${key}`} entering={FadeInDown.delay(i * 100).duration(400)} style={d.card}>
                 <Text style={d.cardLabel}>{CARD_LABELS[key] ?? key}</Text>
                 {key === 'careLevel' ? (
                   <View style={[d.careLevelPill, { borderColor: color }]}>
@@ -415,23 +415,24 @@ export default function PlantDetailsAiGenerated() {
             );
           })}
 
-          <Text style={d.providerBadge}>Powered by {PROVIDER_LABELS[aiProvider] ?? aiProvider}</Text>
+          <Text testID="plant-details-provider-badge" style={d.providerBadge}>Powered by {PROVIDER_LABELS[aiProvider] ?? aiProvider}</Text>
 
 
 
           {!inCollection && !showAddPicker && (
-            <TouchableOpacity style={d.collectionBtn} onPress={() => setShowAddPicker(true)}>
+            <TouchableOpacity testID="plant-details-add-to-collection-button" style={d.collectionBtn} onPress={() => setShowAddPicker(true)}>
               <Text style={d.collectionBtnText}>+ Save to Collection</Text>
             </TouchableOpacity>
           )}
 
           {!inCollection && showAddPicker && (
-            <View style={d.collectionPicker}>
+            <View testID="plant-details-add-picker" style={d.collectionPicker}>
               <Text style={d.collectionPickerLabel}>Add to collection as:</Text>
               <View style={d.statusRow}>
                 {STATUS_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.status}
+                    testID={`plant-details-add-status-pill-${opt.status}`}
                     style={[d.statusPill, draftStatus === opt.status && d.statusPillActive]}
                     onPress={() => setDraftStatus(opt.status)}
                   >
@@ -441,17 +442,17 @@ export default function PlantDetailsAiGenerated() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <TouchableOpacity style={d.collectionBtnSaved} onPress={() => handleSaveToCollection(draftStatus)}>
+              <TouchableOpacity testID="plant-details-save-collection-button" style={d.collectionBtnSaved} onPress={() => handleSaveToCollection(draftStatus)}>
                 <Text style={d.collectionBtnSavedText}>Save</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowAddPicker(false)} style={d.dismissLink}>
+              <TouchableOpacity testID="plant-details-add-cancel-button" onPress={() => setShowAddPicker(false)} style={d.dismissLink}>
                 <Text style={d.dismissLinkText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {inCollection && !showEditSection && (
-            <View style={d.collectionSaved}>
+            <View testID="plant-details-collection-saved" style={d.collectionSaved}>
               <View style={d.collectionSavedLeft}>
                 <Text style={d.collectionSavedIcon}>🪴</Text>
                 <View>
@@ -468,19 +469,20 @@ export default function PlantDetailsAiGenerated() {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity onPress={openEditSection}>
+              <TouchableOpacity testID="plant-details-edit-collection-button" onPress={openEditSection}>
                 <Text style={d.editLinkText}>Edit</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {inCollection && showEditSection && (
-            <View style={d.editSection}>
+            <View testID="plant-details-edit-section" style={d.editSection}>
               <Text style={d.editSectionLabel}>STATUS</Text>
               <View style={d.statusRow}>
                 {STATUS_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.status}
+                    testID={`plant-details-edit-status-pill-${opt.status}`}
                     style={[d.statusPill, draftStatus === opt.status && d.statusPillActive]}
                     onPress={() => setDraftStatus(opt.status)}
                   >
@@ -493,18 +495,19 @@ export default function PlantDetailsAiGenerated() {
               <Text style={d.editSectionLabel}>RATING</Text>
               <View style={d.starRow}>
                 {[1, 2, 3, 4, 5].map(n => (
-                  <TouchableOpacity key={n} onPress={() => setDraftRating(draftRating === n ? undefined : n)}>
+                  <TouchableOpacity key={n} testID={`plant-details-star-${n}`} onPress={() => setDraftRating(draftRating === n ? undefined : n)}>
                     <Text style={d.star}>{n <= (draftRating ?? 0) ? '★' : '☆'}</Text>
                   </TouchableOpacity>
                 ))}
                 {draftRating != null && (
-                  <TouchableOpacity onPress={() => setDraftRating(undefined)} style={d.clearRating}>
+                  <TouchableOpacity testID="plant-details-clear-rating" onPress={() => setDraftRating(undefined)} style={d.clearRating}>
                     <Text style={d.clearRatingText}>Clear</Text>
                   </TouchableOpacity>
                 )}
               </View>
               <Text style={d.editSectionLabel}>NOTES</Text>
               <TextInput
+                testID="plant-details-notes-input"
                 style={d.notesInput}
                 value={draftNotes}
                 onChangeText={setDraftNotes}
@@ -514,10 +517,10 @@ export default function PlantDetailsAiGenerated() {
                 numberOfLines={3}
                 textAlignVertical="top"
               />
-              <TouchableOpacity style={d.collectionBtnSaved} onPress={handleUpdateCollection}>
+              <TouchableOpacity testID="plant-details-save-changes-button" style={d.collectionBtnSaved} onPress={handleUpdateCollection}>
                 <Text style={d.collectionBtnSavedText}>Save Changes</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleRemoveFromCollection} style={d.dismissLink}>
+              <TouchableOpacity testID="plant-details-remove-collection-button" onPress={handleRemoveFromCollection} style={d.dismissLink}>
                 <Text style={d.removeLinkText}>Remove from Collection</Text>
               </TouchableOpacity>
             </View>
@@ -526,6 +529,7 @@ export default function PlantDetailsAiGenerated() {
           {inCollection && (
             existingListing ? (
               <TouchableOpacity
+                testID="plant-details-remove-listing-button"
                 style={d.listingRemoveBtn}
                 onPress={async () => {
                   await deleteListing(existingListing.id);
@@ -537,6 +541,7 @@ export default function PlantDetailsAiGenerated() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
+                testID="plant-details-listing-button"
                 style={d.listingBtn}
                 onPress={() => {
                   setListingType('trade');
@@ -551,7 +556,7 @@ export default function PlantDetailsAiGenerated() {
           )}
 
           {inCollection && collectionEntry?.status === 'own' && currentUserId && (
-            <TouchableOpacity style={d.deathBtn} onPress={() => setShowDeadModal(true)}>
+            <TouchableOpacity testID="plant-details-mark-dead-button" style={d.deathBtn} onPress={() => setShowDeadModal(true)}>
               <Text style={d.deathBtnText}>☠️ Mark as dead</Text>
             </TouchableOpacity>
           )}
@@ -559,18 +564,19 @@ export default function PlantDetailsAiGenerated() {
           {Platform.OS !== 'web' && (
             <View style={d.reminderSection}>
               {!showPicker && !activeReminder && (
-                <TouchableOpacity style={d.reminderSetBtn} onPress={() => setShowPicker(true)}>
+                <TouchableOpacity testID="plant-details-reminder-set-button" style={d.reminderSetBtn} onPress={() => setShowPicker(true)}>
                   <Text style={d.reminderSetText}>💧 Set Watering Reminder</Text>
                 </TouchableOpacity>
               )}
 
               {showPicker && (
-                <View style={d.reminderPicker}>
+                <View testID="plant-details-reminder-picker" style={d.reminderPicker}>
                   <Text style={d.reminderPickerLabel}>Remind me every:</Text>
                   <View style={d.reminderOptionsRow}>
                     {REMINDER_OPTIONS.map(opt => (
                       <TouchableOpacity
                         key={opt.days}
+                        testID={`plant-details-reminder-option-${opt.days}`}
                         style={d.reminderOption}
                         onPress={() => handleSetReminder(opt.days)}
                       >
@@ -578,18 +584,18 @@ export default function PlantDetailsAiGenerated() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <TouchableOpacity onPress={() => setShowPicker(false)}>
+                  <TouchableOpacity testID="plant-details-reminder-dismiss" onPress={() => setShowPicker(false)}>
                     <Text style={d.reminderDismiss}>Dismiss</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
               {activeReminder && (
-                <View style={d.reminderActive}>
+                <View testID="plant-details-reminder-active" style={d.reminderActive}>
                   <Text style={d.reminderActiveText}>
                     💧 Reminder every {activeReminder.intervalDays} days
                   </Text>
-                  <TouchableOpacity onPress={handleCancelReminder}>
+                  <TouchableOpacity testID="plant-details-reminder-cancel" onPress={handleCancelReminder}>
                     <Text style={d.reminderDismiss}>Cancel</Text>
                   </TouchableOpacity>
                 </View>
@@ -632,6 +638,7 @@ export default function PlantDetailsAiGenerated() {
             ] as const).map(opt => (
               <TouchableOpacity
                 key={opt.type}
+                testID={`listing-type-pill-${opt.type}`}
                 style={[d.listingTypePill, listingType === opt.type && d.listingTypePillActive]}
                 onPress={() => setListingType(opt.type)}
               >
@@ -646,6 +653,7 @@ export default function PlantDetailsAiGenerated() {
             <>
               <Text style={d.modalLabel}>PRICE ($)</Text>
               <TextInput
+                testID="listing-price-input"
                 style={d.modalInput}
                 value={listingPrice}
                 onChangeText={setListingPrice}
@@ -658,6 +666,7 @@ export default function PlantDetailsAiGenerated() {
 
           <Text style={d.modalLabel}>DESCRIPTION (optional)</Text>
           <TextInput
+            testID="listing-description-input"
             style={[d.modalInput, d.modalInputMultiline]}
             value={listingDescription}
             onChangeText={v => setListingDescription(v.slice(0, 200))}
@@ -670,6 +679,7 @@ export default function PlantDetailsAiGenerated() {
           />
 
           <TouchableOpacity
+            testID="listing-create-button"
             style={[d.collectionBtnSaved, listingSubmitting && { opacity: 0.6 }]}
             disabled={listingSubmitting}
             onPress={async () => {
@@ -701,7 +711,7 @@ export default function PlantDetailsAiGenerated() {
             }
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setShowListingModal(false)} style={d.dismissLink}>
+          <TouchableOpacity testID="listing-cancel-button" onPress={() => setShowListingModal(false)} style={d.dismissLink}>
             <Text style={d.dismissLinkText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -714,12 +724,13 @@ export default function PlantDetailsAiGenerated() {
       animationType="fade"
       onRequestClose={() => setShowDeadModal(false)}
     >
-      <View style={d.modalOverlay}>
-        <View style={d.modalBox}>
+      <View testID="dead-modal-overlay" style={d.modalOverlay}>
+        <View testID="dead-modal-content" style={d.modalBox}>
           <Text style={d.deadModalTitle}>Mark as Dead ☠️</Text>
 
           <Text style={d.modalLabel}>WHAT WENT WRONG? (optional)</Text>
           <TextInput
+            testID="dead-cause-input"
             style={d.modalInput}
             value={deadCause}
             onChangeText={t => setDeadCause(t.slice(0, 100))}
@@ -730,6 +741,7 @@ export default function PlantDetailsAiGenerated() {
 
           <Text style={d.modalLabel}>ANY REFLECTIONS? (optional)</Text>
           <TextInput
+            testID="dead-notes-input"
             style={[d.modalInput, d.modalInputMultiline]}
             value={deadNotes}
             onChangeText={t => setDeadNotes(t.slice(0, 300))}
@@ -742,6 +754,7 @@ export default function PlantDetailsAiGenerated() {
           />
 
           <TouchableOpacity
+            testID="dead-confirm-button"
             style={[d.deathConfirmBtn, markingDead && { opacity: 0.6 }]}
             onPress={handleMarkAsDead}
             disabled={markingDead}
@@ -752,6 +765,7 @@ export default function PlantDetailsAiGenerated() {
             }
           </TouchableOpacity>
           <TouchableOpacity
+            testID="dead-cancel-button"
             onPress={() => { setShowDeadModal(false); setDeadCause(''); setDeadNotes(''); }}
             style={d.dismissLink}
           >

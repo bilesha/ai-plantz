@@ -42,7 +42,10 @@
       "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); import json; cfg=json.loads\\(d[d.find\\('{'\\):]\\) if '{' in d else {}; [print\\(k,':',v\\) for k,v in cfg.get\\('configs',[{}]\\)[0].items\\(\\) if k in ['preset','setupFiles','setupFilesAfterFramework','setupFilesAfterEach','testEnvironment','transform','moduleNameMapper']]\")",
       "Bash(sed -E \"s/.*\\\\.from\\\\\\('\\([a-z_]*\\)'\\\\\\).*/\\\\1/\")",
       "PowerShell(\\(Get-Content \"F:\\\\Code\\\\React\\\\ai-plantz\\\\CLAUDE.md\" -Raw\\).Length)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Remove-Item \"F:\\\\Code\\\\React\\\\ai-plantz\\\\logic\\\\fertilizerLogic.ts\" -Force)",
+      "Bash(Remove-Item \"F:\\\\Code\\\\React\\\\ai-plantz\\\\__tests__\\\\fertilizerLogic.test.ts\" -Force)",
+      "Bash(Write-Host \"deleted\")"
     ]
   }
 }

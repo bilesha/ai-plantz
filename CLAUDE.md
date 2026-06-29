@@ -54,7 +54,7 @@ Three layers, each with a distinct purpose:
 
 | Layer | What lives here |
 |---|---|
-| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows`, `plant_photos`, `plant_chats`, `plant_listings`, `plant_death_log`, `plant_health_log`, `health_log_comments`, `plant_likes`, `plant_comments`, `notifications`, `potw_nominations`, `potw_votes`, `user_streaks`, `user_badges`, `leaderboard` |
+| **Supabase** (authenticated users) | `plant_history`, `plant_collection`, `watering_log`, `profiles`, `follows`, `plant_photos`, `plant_chats`, `plant_listings`, `plant_death_log`, `plant_health_log`, `health_log_comments`, `plant_likes`, `plant_comments`, `notifications`, `potw_nominations`, `potw_votes`, `user_streaks`, `user_badges`, `leaderboard`, `fertilizer_products`, `fertilizer_recipes`, `fertilizer_recipe_products` |
 | **AsyncStorage** (fallback / always-local) | `plantHistory`, `plantCollection`, `wateringLog_*` when unauthenticated; `cache_*`, `image_*`, `reminder_*`, `seen_welcome_v2`, `ai_provider`, `theme_preference` always |
 | **AsyncStorage migration flags** | `collection_migrated_v1` — prevents re-running the one-time data migration |
 
@@ -85,6 +85,9 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 | `user_streaks` | `user_id`, `current_streak`, `longest_streak`, `last_activity_date` | `logic/gamificationLogic.ts` |
 | `user_badges` | `user_id`, `badge_key`, `earned_at`; unique on `(user_id, badge_key)` | `logic/gamificationLogic.ts` |
 | `leaderboard` | `user_id`, `username`, `avatar_url`, `collection_count`, `streak`, `badge_count`, `score`, `updated_at` | `logic/gamificationLogic.ts` |
+| `fertilizer_products` | `user_id`, `name`, `manufacturer_ratio`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
+| `fertilizer_recipes` | `user_id`, `name`, `instructions`, `applies_to`, `application_method`, `frequency`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
+| `fertilizer_recipe_products` | `recipe_id` (→ `fertilizer_recipes.id`), `product_id` (→ `fertilizer_products.id`, on delete set null), `amount`; RLS via parent recipe | `logic/fertilizerLogic.ts` |
 
 **`notifications` is never inserted into by app code** — `notificationLogic.ts` only reads and updates (`getNotifications`, `markAllRead`, `getUnreadCount`). Rows must be populated by a Supabase trigger/function on `follows`/`plant_likes`/`plant_comments` inserts (not present in this repo). The `notifications.tsx` screen and the bell badge will stay empty until that trigger exists.
 
@@ -336,6 +339,7 @@ MOCK_MODE=...                # Optional — "true" disables all AI provider call
   - `locationLogic.ts` — `requestAndSaveLocation` (writes `profiles.latitude`/`longitude`/`location_updated_at`), `getSavedLocation`; `getCurrentWeather(lat, lon)` (OpenWeatherMap, needs `EXPO_PUBLIC_OPENWEATHER_API_KEY`, returns `null` without it), `getHemisphere(lat)`, `getCurrentSeason(lat)`
   - `seasonalAdviceLogic.ts` — `getSeasonalAdvice(plantDetails?)` — combines location + weather + current season to return `SeasonalAdvice`; `getSeasonEmoji(season)`
   - `potwLogic.ts` — `getCurrentNominations`, `nominatePlant`, `voteForNomination`, `getUserNominationThisWeek`; wraps Plant of the Week feature
+  - `fertilizerLogic.ts` — `getFertilizerProducts`, `addFertilizerProduct`, `updateFertilizerProduct`, `deleteFertilizerProduct`, `getFertilizerRecipes`, `getFertilizerRecipe`, `addFertilizerRecipe`, `updateFertilizerRecipe`, `deleteFertilizerRecipe`; wraps `fertilizer_products`, `fertilizer_recipes`, `fertilizer_recipe_products` tables; authenticated only
 - `utilities/` — API/network helpers:
   - `fetchPlantTips.ts` — reads `ai_provider` from AsyncStorage, calls backend `/api/plant-tips` with `{ plantName, aiProvider }`
   - `fetchPlantImage.ts` — queries Wikipedia REST API for thumbnails
@@ -381,6 +385,7 @@ All test files are in `__tests__/`. Run a single file: `npm test -- --testPathPa
 | `gamificationLogic.test.ts` | `recordActivity` (new streak, increment, reset, idempotent today); `checkAndAwardBadges` (badge conditions); `getStreakData`; `getBadges`; `updateLeaderboard` |
 | `photoLogic.test.ts` | `getPlantPhotos`, `uploadPlantPhoto` (primary auto-set, collection back-fill), `deletePhoto`, `setPrimaryPhoto` |
 | `chatLogic.test.ts` | `getPlantChat`, `saveChatMessage`, `clearPlantChat`; authenticated and unauthenticated paths |
+| `fertilizerLogic.test.ts` | product CRUD; `getFertilizerRecipes`/`getFertilizerRecipe` (nested join, empty products, null product name); `addFertilizerRecipe` (with products, empty products); `updateFertilizerRecipe` (fields only, with product replacement, empty replacement); `deleteFertilizerRecipe` |
 | `diagnosisLogic.test.ts` | `diagnosePlant` — happy path, server error, network error |
 | `compareLogic.test.ts` | `comparePlants` — happy path, provider selection, server error |
 | `compare.test.tsx` | `CompareScreen` rendering, input → compare → result display, error state, "Compare again" / "Try again" reset |

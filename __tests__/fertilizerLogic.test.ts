@@ -134,7 +134,7 @@ describe('addFertilizerProduct', () => {
     chain.single.mockResolvedValue({ data: PRODUCT_FIXTURE, error: null });
     mockFrom.mockReturnValue(chain);
 
-    const result = await addFertilizerProduct({ name: 'GrowMaster', manufacturer_ratio: '1 tsp per gallon', notes: null });
+    const result = await addFertilizerProduct({ name: 'GrowMaster', type: null, manufacturer_ratio: '1 tsp per gallon', notes: null });
 
     expect(result).toEqual(PRODUCT_FIXTURE);
     expect(chain.insert).toHaveBeenCalledWith(
@@ -145,7 +145,7 @@ describe('addFertilizerProduct', () => {
   test('returns null when unauthenticated', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } });
 
-    const result = await addFertilizerProduct({ name: 'x', manufacturer_ratio: null, notes: null });
+    const result = await addFertilizerProduct({ name: 'x', type: null, manufacturer_ratio: null, notes: null });
 
     expect(result).toBeNull();
     expect(mockFrom).not.toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('addFertilizerProduct', () => {
     chain.single.mockResolvedValue({ data: null, error: { message: 'Insert failed' } });
     mockFrom.mockReturnValue(chain);
 
-    const result = await addFertilizerProduct({ name: 'x', manufacturer_ratio: null, notes: null });
+    const result = await addFertilizerProduct({ name: 'x', type: null, manufacturer_ratio: null, notes: null });
 
     expect(result).toBeNull();
   });

@@ -12,6 +12,14 @@ import {
 import { useTheme, type Theme } from '../../constants/theme';
 import { getNotifications, markAllRead, type NotificationItem } from '../../logic/notificationLogic';
 
+function messageFor(type: string): string {
+  switch (type) {
+    case 'like':    return ' liked your plant';
+    case 'comment': return ' commented on your plant';
+    default:        return ' started following you';
+  }
+}
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -56,7 +64,7 @@ export default function NotificationsScreen() {
         <View style={s.centered}>
           <Text style={s.emptyIcon}>🔔</Text>
           <Text style={s.emptyTitle}>No notifications yet</Text>
-          <Text style={s.emptyBody}>When someone follows you, it'll show up here.</Text>
+          <Text style={s.emptyBody}>When someone follows you, likes, or comments on your plants, it'll show up here.</Text>
         </View>
       ) : (
         <FlatList
@@ -75,7 +83,7 @@ export default function NotificationsScreen() {
               <View style={s.rowText}>
                 <Text style={s.rowMessage}>
                   <Text style={s.rowUsername}>{item.username ?? 'Someone'}</Text>
-                  <Text>{' started following you'}</Text>
+                  <Text>{messageFor(item.type)}</Text>
                 </Text>
                 <Text style={s.rowTime}>{relativeTime(item.created_at)}</Text>
               </View>

@@ -60,6 +60,7 @@ import { getActiveListings, type ListingWithProfile } from '../logic/listingLogi
 import { followUser } from '../logic/followLogic';
 import { useToast } from '../context/ToastContext';
 import FeedItemRow from '../components/FeedItem';
+import PlantIdentifyCard from '../components/PlantIdentifyCard';
 import {
   getCurrentNominations,
   getUserNominationThisWeek,
@@ -487,6 +488,8 @@ export default function DiscoverScreen() {
               </ScrollView>
             </View>
           )}
+
+          <PlantIdentifyCard />
 
           <TouchableOpacity
             testID="compare-plants-card"

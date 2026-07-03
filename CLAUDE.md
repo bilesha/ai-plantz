@@ -38,7 +38,7 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Frontend**: React Native 0.79.6 + Expo 53, Expo Router (file-based routing like Next.js), Supabase for auth and cloud persistence, AsyncStorage for local caching and offline fallback, NativeWind + Tailwind for styling.
 
-**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with five endpoints — `GET /health`, `POST /api/plant-tips`, `POST /api/plant-diagnosis`, `POST /api/plant-chat`, and `POST /api/plant-compare`. `/api/plant-tips` dispatches to one of five AI providers based on the `aiProvider` field. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database. When `MOCK_MODE=true`, every endpoint short-circuits and returns a fixed mock response with no AI provider call — used for free, instant, repeatable Playwright/automated test runs.
+**Backend**: Single Express 5.1 TypeScript server (`backend/src/index.ts`) with seven endpoints — `GET /health`, `POST /api/plant-tips`, `POST /api/plant-diagnosis`, `POST /api/plant-identify`, `POST /api/plant-chat`, `POST /api/plant-compare`, and `GET /api/plant-search` (Trefle). `/api/plant-tips` dispatches to one of five AI providers based on the `aiProvider` field. Rate-limited to 10 req/IP/min via `express-rate-limit`. Stateless — no database. When `MOCK_MODE=true`, every endpoint short-circuits and returns a fixed mock response with no AI provider call — used for free, instant, repeatable Playwright/automated test runs.
 
 **Data flow**: All screens call `utilities/fetchPlantTips.ts` → reads `ai_provider` from AsyncStorage → `POST /api/plant-tips` with `{ plantName, aiProvider }` → chosen provider → `{ summary, details }`. The detail screen (`PlantDetailsAiGenerated.tsx`) checks `cache_${plantName}_${provider}` in AsyncStorage first and only calls the API on a miss. Cache keys are per-provider so switching providers always fetches fresh tips.
 
@@ -89,7 +89,7 @@ All tables have RLS enabled with `auth.uid() = user_id` (or `id` for `profiles`)
 | `fertilizer_recipes` | `user_id`, `name`, `instructions`, `applies_to`, `application_method`, `frequency`, `notes`, `created_at` | `logic/fertilizerLogic.ts` |
 | `fertilizer_recipe_products` | `recipe_id` (→ `fertilizer_recipes.id`), `product_id` (→ `fertilizer_products.id`, on delete set null), `amount`; RLS via parent recipe | `logic/fertilizerLogic.ts` |
 
-**`notifications` is never inserted into by app code** — `notificationLogic.ts` only reads and updates (`getNotifications`, `markAllRead`, `getUnreadCount`). Rows must be populated by a Supabase trigger/function on `follows`/`plant_likes`/`plant_comments` inserts (not present in this repo). The `notifications.tsx` screen and the bell badge will stay empty until that trigger exists.
+**`notifications` is never inserted into by app code** — `notificationLogic.ts` only reads and updates (`getNotifications`, `markAllRead`, `getUnreadCount`). Rows are populated by Supabase triggers on `follows`/`plant_likes`/`plant_comments` inserts — SQL lives in `supabase/notification_triggers.sql` and must be applied via the Supabase dashboard SQL editor. Notification `type` is `'follow' | 'like' | 'comment'`; `notifications.tsx` renders a message per type.
 
 Required Supabase policies beyond the defaults:
 

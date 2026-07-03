@@ -60,7 +60,8 @@ const MOCK_RESPONSE = {
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// 10mb limit: /api/plant-diagnosis receives base64-encoded photos in the JSON body
+app.use(express.json({ limit: "10mb" }));
 
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -355,6 +356,96 @@ app.post(
     } catch (error) {
       console.error("Gemini diagnosis error:", error);
       res.status(500).json({ error: "Failed to diagnose plant from image." });
+    }
+  }
+);
+
+// --- Plant identification endpoint ---
+
+const MOCK_IDENTIFY_RESPONSE = {
+  isPlant: true,
+  plantName: "Mock Monstera",
+  scientificName: "Monstera fictus",
+  confidence: "high",
+  description:
+    "Identified by its large fenestrated leaves. Mock Monstera is used in automated tests to ensure identification works without calling real AI providers.",
+};
+
+const IDENTIFY_PROMPT = `
+You are a botanist. Identify the plant in the provided image.
+
+Respond with a JSON object ONLY — no markdown, no extra text.
+{
+  "isPlant": boolean,
+  "plantName": string,
+  "scientificName": string,
+  "confidence": "high" | "medium" | "low",
+  "description": string
+}
+
+- "isPlant": false if the image does not clearly contain a plant.
+- "plantName": the most common English name (e.g. "Snake Plant"). Empty string if isPlant is false.
+- "scientificName": binomial name (e.g. "Dracaena trifasciata"). Empty string if unknown.
+- "confidence": how certain you are of the identification.
+- "description": 1-2 sentences naming the visual features that led to the identification, or why it could not be identified.
+`;
+
+app.post(
+  "/api/plant-identify",
+  (req, res, next) => {
+    if (MOCK_MODE) return res.json(MOCK_IDENTIFY_RESPONSE);
+    next();
+  },
+  plantTipsLimiter,
+  async (req, res) => {
+    const { imageBase64, mimeType } = req.body as {
+      imageBase64?: string;
+      mimeType?: string;
+    };
+
+    if (!imageBase64 || typeof imageBase64 !== "string" || imageBase64.length === 0) {
+      return res.status(400).json({ error: "imageBase64 is required" });
+    }
+    if (!mimeType || typeof mimeType !== "string") {
+      return res.status(400).json({ error: "mimeType is required" });
+    }
+
+    try {
+      const result = await withTimeout(
+        geminiModel.generateContent([
+          { inlineData: { data: imageBase64, mimeType } },
+          { text: IDENTIFY_PROMPT },
+        ]),
+        20_000,
+        "Gemini identify"
+      );
+
+      const responseText = result.response.text().replace(/```json/gi, "").replace(/```/g, "").trim();
+
+      let parsedResponse: unknown;
+      try {
+        parsedResponse = JSON.parse(responseText);
+      } catch {
+        console.error("Gemini identify returned unparseable JSON:", responseText);
+        return res.status(502).json({ error: "AI service returned an invalid response" });
+      }
+
+      const r = parsedResponse as Record<string, unknown>;
+      if (
+        typeof r.isPlant !== "boolean" ||
+        typeof r.plantName !== "string" ||
+        typeof r.scientificName !== "string" ||
+        typeof r.confidence !== "string" ||
+        typeof r.description !== "string"
+      ) {
+        console.error("Gemini identify response missing expected fields:", parsedResponse);
+        return res.status(502).json({ error: "AI service returned an unexpected response shape" });
+      }
+
+      res.json(parsedResponse);
+    } catch (error) {
+      console.error("Gemini identify error:", error);
+      res.status(500).json({ error: "Failed to identify plant from image." });
     }
   }
 );

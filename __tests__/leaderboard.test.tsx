@@ -29,7 +29,7 @@ const mockRows = [
 ];
 
 function setupSupabaseMock(rows: typeof mockRows, userId = 'u1') {
-  mockSupabase.auth.getSession.mockResolvedValue({
+  (mockSupabase.auth.getSession as jest.Mock).mockResolvedValue({
     data: { session: { user: { id: userId } } },
   } as any);
   const queryBuilder = {
@@ -46,7 +46,7 @@ beforeEach(() => {
 
 describe('LeaderboardScreen', () => {
   it('shows loading indicator initially', () => {
-    mockSupabase.auth.getSession.mockImplementation(() => new Promise(() => {}));
+    (mockSupabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
     mockSupabase.from.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),

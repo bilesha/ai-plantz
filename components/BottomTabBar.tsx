@@ -24,8 +24,8 @@ export default function BottomTabBar() {
   const theme = useTheme();
   const s = useMemo(() => styles(theme), [theme]);
 
-  // Empty segments array means we're at the index route (/).
-  const lastSegment = segments.length === 0 ? '' : (segments[segments.length - 1] ?? '');
+  // Empty segments array means we're at the index route (/), so fall back to ''.
+  const lastSegment = segments[segments.length - 1] ?? '';
 
   return (
     <View style={s.outerWrapper}>

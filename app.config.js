@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 export default {
   expo: {
     name: "Rootnote",
@@ -11,10 +9,6 @@ export default {
       image: './assets/images/splash-icon.png',
       resizeMode: 'contain',
       backgroundColor: '#059669',
-    },
-    extra: {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY
     },
     plugins: [
       [

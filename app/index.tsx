@@ -171,6 +171,7 @@ export default function DiscoverScreen() {
   const [plantResults, setPlantResults] = useState<PlantResult[]>([]);
   const [loading, setLoading]         = useState(false);
   const [searched, setSearched]       = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [trending, setTrending]               = useState<TrendingPlant[]>([]);
@@ -255,11 +256,13 @@ export default function DiscoverScreen() {
       setResults([]);
       setPlantResults([]);
       setSearched(false);
+      setSearchFailed(false);
       return;
     }
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setSearchFailed(false);
       try {
         if (searchType === 'users') {
           const { data } = await supabase
@@ -284,6 +287,13 @@ export default function DiscoverScreen() {
           setPlantResults(unique);
           setResults([]);
         }
+        setSearched(true);
+      } catch {
+        // Plant search backend unavailable (e.g. Trefle not configured) —
+        // show the empty state with the AI fallback instead of failing silently.
+        setPlantResults([]);
+        setResults([]);
+        setSearchFailed(true);
         setSearched(true);
       } finally {
         setLoading(false);
@@ -398,13 +408,19 @@ export default function DiscoverScreen() {
 
       {!loading && searched && searchType === 'plants' && plantResults.length === 0 && (
         <View style={s.emptyState}>
-          <Text style={s.emptyIcon}>🔍</Text>
-          <Text style={s.emptyText}>No plants found for "{query.trim()}".</Text>
+          <Text style={s.emptyIcon}>{searchFailed ? '⚠️' : '🔍'}</Text>
+          <Text style={s.emptyText}>
+            {searchFailed
+              ? 'Plant search is unavailable right now.'
+              : `No plants found for "${query.trim()}".`}
+          </Text>
           <TouchableOpacity
             style={s.aiSearchBtn}
             onPress={() => router.push({ pathname: '/screens/aiAssistant', params: { plantName: query.trim() } })}
           >
-            <Text style={s.aiSearchBtnText}>Don't see it? Search with AI instead</Text>
+            <Text style={s.aiSearchBtnText}>
+              {searchFailed ? 'Search with AI instead' : "Don't see it? Search with AI instead"}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -529,6 +545,20 @@ export default function DiscoverScreen() {
             <View style={s.compareCardText}>
               <Text style={s.compareCardTitle}>Fertilizer</Text>
               <Text style={s.compareCardSub}>Track your products and recipes</Text>
+            </View>
+            <Text style={s.compareCardChevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="calendar-card"
+            style={s.compareCard}
+            onPress={() => router.push('/screens/calendar')}
+            activeOpacity={0.8}
+          >
+            <Text style={s.compareCardIcon}>🗓️</Text>
+            <View style={s.compareCardText}>
+              <Text style={s.compareCardTitle}>Care Calendar</Text>
+              <Text style={s.compareCardSub}>Watering & fertilizing schedule at a glance</Text>
             </View>
             <Text style={s.compareCardChevron}>›</Text>
           </TouchableOpacity>

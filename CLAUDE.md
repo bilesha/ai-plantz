@@ -44,7 +44,7 @@ Backend default port: `5000` (override with `PORT` env var).
 
 **Auth flow**: `app/_layout.tsx` wraps the app in `ThemeProvider` → `ToastProvider` → `RootLayoutInner`. `RootLayoutInner` listens to `supabase.auth.onAuthStateChange` and redirects unauthenticated users to `/screens/auth`. On `SIGNED_IN` it also calls `migrateLocalCollectionToSupabase()` to move any pre-login local collection data to the cloud.
 
-**Navigation**: A `BottomTabBar` component renders 6 tabs (Home, Discover, Collection, History, Profile, Settings). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, followersList, auth, username) are NOT wrapped in ScreenLayout and have no tab bar.
+**Navigation**: A `BottomTabBar` component renders 6 tabs (Home, Discover, Collection, History, Profile, Settings). Tab screens are wrapped in `ScreenLayout` (which renders children + BottomTabBar). Detail screens (PlantDetailsAiGenerated, publicProfile, editProfile, followersList, auth, username, fertilizer, calendar) are NOT wrapped in ScreenLayout and have no tab bar. The calendar screen (`app/screens/calendar.tsx`) merges watering schedules, parsed fertilizer recipe frequencies (`logic/calendarLogic.ts:parseFrequencyToDays`), and seasonal advice into week/month views.
 
 ## Key Architectural Decisions
 
